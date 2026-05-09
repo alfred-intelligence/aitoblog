@@ -1,8 +1,30 @@
 {
   "name": "aitoblog",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
+  "description": "Helautomatisk AI-driven teknisk blogg. Astro + Cloudflare Pages + Anthropic Claude. GitHub Actions cron skriver inläggen åt dig.",
+  "license": "MIT",
+  "author": "Alfred Intelligence",
+  "homepage": "https://github.com/alfred-intelligence/aitoblog#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alfred-intelligence/aitoblog.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alfred-intelligence/aitoblog/issues"
+  },
+  "keywords": [
+    "astro",
+    "cloudflare-pages",
+    "anthropic",
+    "claude",
+    "ai-blog",
+    "automation",
+    "gitops",
+    "rss",
+    "template"
+  ],
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
@@ -10,7 +32,8 @@
     "preview": "astro preview",
     "astro": "astro",
     "check": "astro check",
-    "generate": "tsx scripts/generate-post.ts"
+    "generate": "tsx scripts/generate-post.ts",
+    "prepare": "husky || true"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",
@@ -25,8 +48,11 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.0",
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.0.0",
+    "husky": "^9.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },

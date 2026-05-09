@@ -1,10 +1,23 @@
 # aitoblog
 
+[![CI](https://github.com/alfred-intelligence/aitoblog/actions/workflows/ci.yml/badge.svg)](https://github.com/alfred-intelligence/aitoblog/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-F38020?logo=cloudflare&logoColor=white)](https://dash.cloudflare.com/?to=/:account/pages/new/provider/github)
+
 Helautomatisk teknisk blogg där en AI skriver inlägg om GitHub-repos och
 artiklar i en kurerad lista. Markdown-filer i Git är källan, push till `main`
 triggar Cloudflare Pages-build, RSS uppdateras automatiskt. Ingen mänsklig
 granskning innan publicering — det är medvetet, designen accepterar det som
 priset för full automation.
+
+## Använd som template
+
+Klicka på **"Use this template"** högst upp på GitHub-sidan (eller klona
+manuellt) för att skapa ditt eget repo. Sätt sedan upp Cloudflare Pages och
+secrets enligt [Setup efter merge](#setup-efter-merge) nedan.
+
+Mall-uppdateringar dras inte automatiskt — när det här repot uppdateras kan du
+cherry-picka ändringar du vill ha in i din klon.
 
 ## Hur det fungerar
 
@@ -171,11 +184,36 @@ Flaggor:
 - Token-kostnaden för långa artiklar trunkeras till ~12 KB innan de skickas
   till Claude.
 
+## Bidra
+
+Använd [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`,
+`fix:`, `chore:`, `docs:`, etc. Detta driver release-please-pipen som sköter
+versioner och CHANGELOG.md automatiskt.
+
+En commitlint-grind (GitHub Action) blockerar PRs där commit-meddelanden inte
+följer konventionen. En lokal Husky-hook ger samma feedback innan push —
+aktiveras automatiskt vid `pnpm install`.
+
+Se [CONTRIBUTING.md](./CONTRIBUTING.md) för fullständig guide.
+
+## Licens
+
+[MIT](./LICENSE) © Alfred Intelligence
+
 ## Filstruktur
 
 ```
 .
-├── .github/workflows/publish.yml
+├── .github/
+│   ├── ISSUE_TEMPLATE/          # bug + feature templates
+│   ├── workflows/
+│   │   ├── ci.yml               # typecheck + build på PRs
+│   │   ├── commitlint.yml       # blockerar non-conventional commits
+│   │   ├── publish.yml          # cron → AI → commit
+│   │   └── release-please.yml   # auto-changelog + tags
+│   ├── dependabot.yml
+│   └── pull_request_template.md
+├── .husky/commit-msg            # lokal commit-format-validering
 ├── astro.config.mjs
 ├── data/
 │   ├── posted.json              # cooldown-state

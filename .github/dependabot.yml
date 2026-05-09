@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      astro:
+        patterns:
+          - "astro"
+          - "@astrojs/*"
+      anthropic:
+        patterns:
+          - "@anthropic-ai/*"
+      readability:
+        patterns:
+          - "@mozilla/readability"
+          - "jsdom"
+          - "@types/jsdom"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci

@@ -1,0 +1,12 @@
+[
+  "cloudflare/workers-sdk",
+  "withastro/astro",
+  "honojs/hono",
+  "tursodatabase/libsql",
+  "oven-sh/bun",
+  "denoland/deno",
+  "https://blog.cloudflare.com/page-functions-ga/",
+  "https://docs.astro.build/en/concepts/why-astro/",
+  "https://developers.cloudflare.com/workers/runtime-apis/fetch/",
+  "https://kubernetes.io/blog/"
+]

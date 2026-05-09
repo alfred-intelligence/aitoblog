@@ -1,0 +1,64 @@
+---
+import BaseLayout from './BaseLayout.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  pubDate: Date;
+  format: 'til' | 'deep-dive' | 'news';
+  sourceType: 'repo' | 'article' | 'docs';
+  sourceUrl: string;
+  sourceTitle: string;
+  tags: string[];
+  aiGenerated: boolean;
+}
+
+const { title, description, pubDate, format, sourceType, sourceUrl, sourceTitle, tags, aiGenerated } = Astro.props;
+
+const formatLabels: Record<Props['format'], string> = {
+  'til': 'TIL',
+  'deep-dive': 'Djupdyk',
+  'news': 'Nyhet',
+};
+
+const sourceTypeLabels: Record<Props['sourceType'], string> = {
+  repo: 'Repo',
+  article: 'Artikel',
+  docs: 'Dokumentation',
+};
+
+const formattedDate = pubDate.toLocaleDateString('sv-SE', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<BaseLayout title={title} description={description}>
+  <article>
+    <h1>{title}</h1>
+    <div class="post-meta">
+      <time datetime={pubDate.toISOString()}>{formattedDate}</time>
+      <span class="badge">{formatLabels[format]}</span>
+      <span class="badge">{sourceTypeLabels[sourceType]}</span>
+      {aiGenerated && <span class="badge ai">AI-genererat</span>}
+    </div>
+    <p><strong>Källa:</strong> <a href={sourceUrl} rel="noopener noreferrer">{sourceTitle}</a></p>
+
+    {aiGenerated && (
+      <div class="disclaimer">
+        Det här inlägget är genererat av en AI utifrån källan ovan. Innehållet
+        har inte granskats av en människa innan publicering — verifiera fakta
+        mot originalkällan.
+      </div>
+    )}
+
+    <slot />
+
+    {tags.length > 0 && (
+      <p style="margin-top: 2rem;">
+        {tags.map((tag) => <span class="badge">#{tag}</span>)}
+      </p>
+    )}
+  </article>
+</BaseLayout>

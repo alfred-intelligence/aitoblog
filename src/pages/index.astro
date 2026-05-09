@@ -1,0 +1,49 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const posts = (await getCollection('blog')).sort(
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
+);
+
+const formatLabels: Record<string, string> = {
+  'til': 'TIL',
+  'deep-dive': 'Djupdyk',
+  'news': 'Nyhet',
+};
+---
+
+<BaseLayout title="aitoblog">
+  <h1>aitoblog</h1>
+  <p>
+    Helautomatisk teknisk blogg. En AI skriver om GitHub-repos och artiklar
+    från en kurerad lista — utan mänsklig granskning innan publicering.
+  </p>
+
+  {posts.length === 0 ? (
+    <p><em>Inga inlägg ännu.</em></p>
+  ) : (
+    <ul class="post-list">
+      {posts.map((post) => {
+        const date = post.data.pubDate.toLocaleDateString('sv-SE', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        });
+        return (
+          <li>
+            <h2><a href={`/blog/${post.id}/`}>{post.data.title}</a></h2>
+            <div class="meta">
+              <time datetime={post.data.pubDate.toISOString()}>{date}</time>
+              {' · '}
+              <span>{formatLabels[post.data.format] ?? post.data.format}</span>
+              {' · '}
+              <span>{post.data.sourceTitle}</span>
+            </div>
+            <p>{post.data.description}</p>
+          </li>
+        );
+      })}
+    </ul>
+  )}
+</BaseLayout>

@@ -1,0 +1,63 @@
+name: publish
+
+on:
+  schedule:
+    # Mån/Ons/Fre kl 08:00 UTC
+    - cron: '0 8 * * 1,3,5'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Kör utan commit (skriver markdown till loggen istället)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate post
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCES_URL: ${{ vars.SOURCES_URL }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            pnpm tsx scripts/generate-post.ts --dry-run
+          else
+            pnpm tsx scripts/generate-post.ts
+          fi
+
+      - name: Commit and push
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "aitoblog-bot"
+          git config user.email "aitoblog-bot@users.noreply.github.com"
+          git add src/content/blog/ data/posted.json
+          if git diff --staged --quiet; then
+            echo "No changes — skipping commit."
+            exit 0
+          fi
+          latest=$(ls -t src/content/blog/*.md | head -1 | xargs -n1 basename | sed 's/\.md$//')
+          git commit -m "post: ${latest}"
+          git push

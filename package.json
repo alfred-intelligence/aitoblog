@@ -49,7 +49,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.0",
     "@commitlint/cli": "^19.5.0",
-    "@commitlint/config-conventional": "^19.5.0",
+    "@commitlint/config-conventional": "^21.0.0",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.0.0",
     "husky": "^9.1.0",

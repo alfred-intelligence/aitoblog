@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Helautomatisk AI-driven teknisk blogg. Astro + Cloudflare Pages + Anthropic Claude. GitHub Actions cron skriver inläggen åt dig.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "license": "MIT",
   "author": "Alfred Intelligence",
   "homepage": "https://github.com/alfred-intelligence/aitoblog#readme",

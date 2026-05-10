@@ -21,8 +21,8 @@ importers:
         specifier: ^5.0.0
         version: 5.18.1(@types/node@22.19.18)(jiti@2.6.1)(rollup@4.60.3)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.4)
       dotenv:
-        specifier: ^16.4.5
-        version: 16.6.1
+        specifier: ^17.4.2
+        version: 17.4.2
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
@@ -1387,8 +1387,8 @@ packages:
     resolution: {integrity: sha512-QM8q3zDe58hqUqjraQOmzZ1LIH9SWQJTlEKCH4kJ2oQvLZk7RbQXvtDM2XEq3fwkV9CCvvH4LA0AV+ogFsBM2Q==}
     engines: {node: '>=8'}
 
-  dotenv@16.6.1:
-    resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
+  dotenv@17.4.2:
+    resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
 
   dset@3.1.4:
@@ -4052,7 +4052,7 @@ snapshots:
     dependencies:
       is-obj: 2.0.0
 
-  dotenv@16.6.1: {}
+  dotenv@17.4.2: {}
 
   dset@3.1.4: {}
 

@@ -125,11 +125,11 @@ Följande beslut låg tysta i fas A och har konkretiserats i fas B-dokumenten (`
 
 | Område | Antagande | Realiserat i |
 |--------|-----------|--------------|
-| Strikthetsnivå | `solo` med separation-of-duties via judge-agent | 05 §1, 07 §1 |
+| Strikthetsnivå | `solo` med separation-of-duties via Claude GitHub App som reviewer | 05 §1, 07 §1 |
 | Licens | MIT (publikt template) | 05 §2 |
 | Branch-strategi | Trunk-based, kortlivade branches, squash-only | 05 §3 |
 | Commit-konventioner | Conventional Commits, commitlint-enforced | 05 §4 |
-| PR-process | Implementer ≠ reviewer; judge är granskare; trustmatris styr auto-merge | 05 §5, 06 §2, 07 §3.5 |
+| PR-process | Implementer ≠ reviewer; Claude GitHub App granskar via claude-code-action; trustmatris styr auto-merge | 05 §5, 06 §2, 07 §3.5 |
 | Releasekadens | Continuous via release-please, deterministic SemVer | 05 §6 |
 | Maintenance | Autonoma kontrollslingor, inte mänsklig drift; sju loopar | 06 |
 | Distribution | Publikt template-repo; konsumenter klonar via "Use this template" | 05 §9 |

@@ -62,13 +62,13 @@ Astro 6-projekt med content collections, RSS-feed, manuell test-post live. Cloud
 **Klar när:**
 
 1. SSoT för Node-versioner på plats (`.nvmrc` + `engines` + workflow-refaktor). Drift-klassen "Node-mismatch" är omöjlig att reproducera.
-2. `judge.yml` deployad. Branch protection kräver `judge` som status check.
+2. Befintlig `claude-code-review.yml` verifierad grön på alla PR-typer (operatör, dependabot, release-please). Rulesetet kräver `Claude Code Review / claude-review` som status check.
 3. `auto-merge-trusted.yml` deployad. Alla aktuella backlog-PR:er (dependabot + release-please) rensade automatiskt.
 4. Auto-delete head branches på + `branch-cleanup.yml` deployad. Inga kvarliggande branches.
 5. `publish.yml` refaktorerad med retry + state-fil + paus-mekanism. `cron-watchdog.yml` deployad.
 6. `drift-check.yml` + `stale.yml` deployade.
 7. `escalate.yml` förberedd (no-op tills `ALFRED_TG_TOKEN` finns).
-8. Branch protection + repo settings + labels applicerade enligt JSON-källfilerna.
+8. Rulesets + repo settings + labels applicerade enligt JSON-källfilerna under `.github/`.
 
 **Beroenden:** Fas 1+2 klara. Designen i 05+06+07 godkänd.
 
@@ -84,11 +84,11 @@ Astro 6-projekt med content collections, RSS-feed, manuell test-post live. Cloud
 
 **Operatörens aktiviteter (vid behov, inte schema):**
 
-- Granska AI-inlägg sporadiskt — om kvaliteten driftar, justera prompten i `scripts/generate-post.ts` (egen PR genom judge).
+- Granska AI-inlägg sporadiskt — om kvaliteten driftar, justera prompten i `scripts/generate-post.ts` (egen PR går genom review-grinden).
 - Hantera `priority:critical`-issues inom 24h enligt 05 §7.
 - Återställa `data/cron-state.json` om cron pausat sig (3 fel i rad).
 - Granska `drift`-issues inom 30 dagar.
-- Granska `judge-blocked`-PR:er inom 1 vecka.
+- Granska PR:er med `judge-blocked`-label inom 1 vecka (om review-escalation-workflowen aktiverats).
 
 **Klar när:** Aldrig — det är drift. Övergången sker när Fas 4 är klar.
 
@@ -109,7 +109,7 @@ Astro 6-projekt med content collections, RSS-feed, manuell test-post live. Cloud
 **Maintenance-delen (Fas 4):**
 
 - [ ] **M8:** SSoT på plats, drift-mismatchen försvunnen
-- [ ] **M9:** Judge-agenten live, branch protection enforced
+- [ ] **M9:** Review-grinden aktiv (`Claude Code Review / claude-review` required check), `ANTHROPIC_API_KEY` på både Actions- och Dependabot-scope
 - [ ] **M10:** Auto-merge för betrodda bots aktivt, dependabot- och release-backlog rensad
 - [ ] **M11:** Branch-hygien aktiv, cron härdad
 - [ ] **M12:** Drift-detektor + stale-loop aktiva
@@ -125,9 +125,9 @@ Astro 6-projekt med content collections, RSS-feed, manuell test-post live. Cloud
 
 **Fas 4 är känslig på två punkter:**
 
-1. **Judge-prompten är empirisk.** Första versionen kommer producera fel verdict på vissa PR-typer. Iterera under första veckans drift; spara konstaterade misclassifieringar i `.github/judge-prompt-evals.md` (informellt) tills mönstret stabiliseras. Räkna med 2–3 prompt-revideringar första månaden.
+1. **Review-grinden måste vara grön på dependabot-PR:er innan den görs required.** Den absolut vanligaste fallgropen är att `ANTHROPIC_API_KEY` bara sätts på Actions-scope, inte Dependabot-scope. Resultat: `startup_failure` på alla dependabot-PR:er, vilket blockerar deras merge eftersom checken aldrig rapporteras. Mitigering: Steg 3 är uppdelat så scope-fixet sker före rulesetet uppdateras till final-fas. Verifiering på testbranch krävs.
 
-2. **Branch protection kan låsa ute operatören om judge går sönder.** Mitigering: `enforce_admins: false` ger operatören admin-bypass i nödfall. Plus: judge-checken får returnera `neutral` när Anthropic API fail — den får inte bli SPOF.
+2. **Rulesetet kan låsa ute operatören om review-grinden går sönder.** Mitigering: rulesetet har bypass-actors för admin-rollen, vilket ger operatören admin-bypass i nödfall. Plus: Anthropic API-fel reflekteras som röd check på enskilda PR:er, inte som global stack-collapse — gäller bara den aktuella PR:n.
 
 **Lägg en halv dags marginal på Fas 4.**
 

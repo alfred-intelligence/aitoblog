@@ -1,0 +1,42 @@
+name: dustpan
+
+# Sweeps inactive PRs and issues. Labels them `stale` after 7 days of
+# inactivity, closes after another 7. Exempt by label: keep, wip,
+# security, priority:critical. Drafts are exempt.
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # daily 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-stale: 7
+          days-before-close: 7
+          stale-pr-label: stale
+          stale-issue-label: stale
+          stale-pr-message: >-
+            This PR has had no activity for 7 days and is marked stale.
+            It will be closed in 7 days unless something happens. Add
+            label `keep` to exempt, or push a commit.
+          close-pr-message: >-
+            Auto-closed by dustpan after 14 days of inactivity. Reopen
+            if relevant.
+          stale-issue-message: >-
+            This issue has had no activity for 7 days and is marked stale.
+            It will be closed in 7 days unless something happens.
+          close-issue-message: >-
+            Auto-closed by dustpan after 14 days of inactivity.
+          exempt-pr-labels: keep,wip,security,priority:critical
+          exempt-issue-labels: keep,priority:critical
+          exempt-draft-pr: true
+          operations-per-run: 100

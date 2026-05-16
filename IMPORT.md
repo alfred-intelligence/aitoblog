@@ -62,7 +62,20 @@ gh api "/repos/$OWNER/$REPO/branches/main/protection" | jq '.required_status_che
 
 Expect `build`, `commitlint`, `judge` in the `checks` list.
 
-## 4. Secrets and variables
+## 4. CodeQL: switch default → advanced setup
+
+This PR ships `.github/workflows/codeql.yml` and `.github/codeql-config.yml`, but they are inert until CodeQL is switched from GitHub's default setup to advanced. Default setup uses a hidden GitHub-hosted config and ignores files in the repo — so any query-filters (like the trust-list for upstream actions) require advanced setup.
+
+In the dashboard:
+
+1. Go to **Settings → Code security and analysis → CodeQL analysis**.
+2. If "Default" is selected, click **Set up → Advanced**.
+3. GitHub will offer to create a `codeql.yml` workflow — decline (one is already committed in this PR).
+4. Confirm the switch.
+
+The next push to `main` (or PR to `main`) will trigger the committed `codeql.yml` instead, and the actions/unpinned-tag warnings will stop appearing for trusted upstream orgs.
+
+## 5. Secrets and variables
 
 The judge loop reads `ANTHROPIC_API_KEY` from repo secrets. If it is not already set (it is shared with the publish workflow), provision it:
 
@@ -73,7 +86,7 @@ gh secret set ANTHROPIC_API_KEY -R "$OWNER/$REPO"
 
 No other secrets are introduced by this PR.
 
-## 5. Smoke test
+## 6. Smoke test
 
 Open a trivial PR (e.g. `docs(readme): typo fix`) from a non-bot branch. Within a few minutes:
 

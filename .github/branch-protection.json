@@ -4,8 +4,7 @@
     "strict": true,
     "checks": [
       { "context": "build" },
-      { "context": "commitlint" },
-      { "context": "judge" }
+      { "context": "commitlint" }
     ]
   },
   "enforce_admins": false,

@@ -44,10 +44,13 @@ Then, manually in the dashboard:
 
 - **Settings → Template repository**: checked (only relevant for the public template; downstream clones leave unchecked).
 - **Settings → General → Discussions**: enabled if you want the issue-template `config.yml` discussion link to resolve.
+- **Settings → Rules → Rulesets**: verify the list is empty before applying branch-protection (avoid double-stacked rules).
 
 ## 3. Branch protection on `main`
 
-Applied via the branches-protection REST endpoint. Required because the judge + auto-merge loops rely on `required_status_checks` being enforced.
+Applied via the branches-protection REST endpoint. Required because the build + commitlint checks need to be enforced for the auto-merge-trusted loop to be meaningful.
+
+Only `build` and `commitlint` are required — not `judge`. Judge skips bot-authored PRs (dependabot, github-actions, release-please) via an `if:` condition in `judge.yml`, so the `judge` check never posts on those PRs. Listing it as required would deadlock every bot-PR. Judge stays as a soft signal: its `request_changes` verdict still calls `exit 1` and shows up as a failing check, and `auto-merge-trusted.yml` will not enable auto-merge on a PR whose judge check is red.
 
 ```bash
 gh api -X PUT "/repos/$OWNER/$REPO/branches/main/protection" \
@@ -60,7 +63,7 @@ Verify:
 gh api "/repos/$OWNER/$REPO/branches/main/protection" | jq '.required_status_checks'
 ```
 
-Expect `build`, `commitlint`, `judge` in the `checks` list.
+Expect `build` and `commitlint` in the `checks` list.
 
 ## 4. Secrets and variables
 

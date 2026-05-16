@@ -15,7 +15,7 @@ Designdokument för en helautomatisk AI-driven blogg med GitOps-arbetsflöde och
 
 - **`05-engineering-handbook.md`** — Strikthetsnivå, licens, branch-strategi, commits, PR-process, release-policy, maintenance-policy, säkerhet, template-konsumtion, roller och ansvar.
 - **`06-ci-cd-plan.md`** — De sju autonoma kontrollslingorna i detalj: trigger, mekanism, grind, stängning, eskalering. Trustmatris, SSoT för tooling, branch protection, eskaleringskanaler.
-- **`07-agent-loop.md`** — Implementer-agentens och judge-agentens loopar, kommunikationskontrakt, sessions-kontinuitet, anti-mönster.
+- **`07-agent-loop.md`** — Implementer-agentens och reviewer-agentens loopar, kommunikationskontrakt, sessions-kontinuitet, anti-mönster.
 
 ## Snabbsammanfattning
 
@@ -24,10 +24,10 @@ Designdokument för en helautomatisk AI-driven blogg med GitOps-arbetsflöde och
 | Stack | Astro 6 + TypeScript |
 | Hosting | Cloudflare Pages |
 | Innehållskälla | JSON-array av GitHub-repos + artikel-URLs |
-| AI | Claude Sonnet (publish + judge) |
+| AI | Claude Sonnet (publish-pipen) + Claude GitHub App (PR-review) |
 | Schemaläggning | GitHub Actions cron, mån/ons/fre 08:00 UTC |
 | Format | Mix — AI väljer per inlägg (TIL / djupdyk / nyhetsrundup) |
-| Godkännande | Inget för innehåll; judge-agent för kod-PR:er |
+| Godkännande | Inget för innehåll; Claude Code Review-grind för kod-PR:er |
 | Output | Markdown i Git → push → Cloudflare Pages bygger → RSS uppdateras |
 | Maintenance | Sju autonoma kontrollslingor (06) |
 | Driftläge | Unattended efter Fas 4 |

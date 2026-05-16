@@ -8,9 +8,9 @@
 
 **Vald nivå:** `solo` med agent-augmentering.
 
-Operatören är ensam mänsklig bidragsgivare. Implementeringsarbete utförs i sessioner av Claude Code (`claude/*`-branches eller lokal session som pushar). Granskning utförs av en separat judge-agent (workflow `judge.yml`).
+Operatören är ensam mänsklig bidragsgivare. Implementeringsarbete utförs i sessioner av Claude Code (`claude/*`-branches eller lokal session som pushar). Granskning utförs av en separat reviewer-agent: Claude GitHub App via `claude-code-review.yml` (baserad på `anthropics/claude-code-action@v1`).
 
-**Motivering:** Skalan motiverar inte `solo+contrib` eller `team`-overhead. Men avsaknaden av en andra mänsklig granskare täcks inte av "ingen granskning alls" — den täcks av judge-agenten. Resultatet är att vissa egenskaper hos `solo+contrib` (oberoende review, CODEOWNERS-liknande gating) uppnås utan att kräva en andra människa.
+**Motivering:** Skalan motiverar inte `solo+contrib` eller `team`-overhead. Men avsaknaden av en andra mänsklig granskare täcks inte av "ingen granskning alls" — den täcks av reviewer-agenten. Resultatet är att vissa egenskaper hos `solo+contrib` (oberoende review, CODEOWNERS-liknande gating) uppnås utan att kräva en andra människa.
 
 **Utbyggnadsläge:** När repot konsumeras som template för dotterprojekt under `alfred-intelligence` förblir nivån `solo`. Strikthetsförändring kräver revidering av detta dokument samt 06.
 
@@ -42,7 +42,7 @@ Operatören är ensam mänsklig bidragsgivare. Implementeringsarbete utförs i s
   - `docs/<scope>` — dokumentation
   - `ci/<scope>` — CI/CD-ändringar
   - `claude/<session-id>` — Claude Code-sessioner (reserverat prefix)
-- Branches mergas via PR efter judge + CI grön.
+- Branches mergas via PR efter review + CI grön.
 - Inga long-lived branches utöver `main`.
 
 **Skyddade branch-prefix** (raderas inte av branch-cleanup, undantagna från stale-loop):
@@ -99,14 +99,16 @@ Den hårda regeln. Den som öppnade PR:n granskar den inte. Mekaniken finns i 06
 
 | Aktör | Krav |
 |-------|------|
-| Dependabot patch/minor + GHA-bumpar | CI grön. Auto-merge sker via `auto-merge-trusted.yml`. |
-| Dependabot major | CI grön + judge approve. Auto-merge sker. |
-| Release-please | CI grön. Auto-merge sker. |
-| Operatör eller `claude/*` | CI grön + judge approve. Auto-merge på PR. |
+| Dependabot patch/minor + GHA-bumpar | CI grön + review approve. Auto-merge sker via `auto-merge-trusted.yml`. |
+| Dependabot major | CI grön + review approve. Auto-merge sker. |
+| Release-please | CI grön + review approve. Auto-merge sker. |
+| Operatör eller `claude/*` | CI grön + review approve. Auto-merge på PR. |
+
+Review körs på *alla* PR:er — den är filterfri. Trustmatrisen i 06 §2 styr bara om auto-merge slås på, inte om review körs.
 
 ### PR-storlek
 
-Riktlinje: < 400 rader diff. Större PR:er motiveras i beskrivningen och kan flaggas av judge som "request_changes" om motivering saknas. Mekaniska massändringar (t.ex. SSoT-refaktor) undantas.
+Riktlinje: < 400 rader diff. Större PR:er motiveras i beskrivningen och kan flaggas av reviewer som "request_changes" om motivering saknas. Mekaniska massändringar (t.ex. SSoT-refaktor) undantas.
 
 ### PR-beskrivning
 
@@ -116,7 +118,7 @@ Mall finns i `.github/PULL_REQUEST_TEMPLATE.md`. Innehåller minimum:
 - **Varför** — en mening eller länk till issue.
 - **Verifiering** — `pnpm astro check && pnpm build` grön; eventuella manuella steg listas.
 
-Judge läser titel + beskrivning + diff. Tom beskrivning på icke-mekanisk PR är skäl för `request_changes`.
+Reviewer läser titel + beskrivning + diff. Tom beskrivning på icke-mekanisk PR är skäl för `request_changes`.
 
 ### Mergestrategi
 
@@ -128,8 +130,8 @@ Squash, alltid. Commit-message = PR-titel. Default-inställning på repo-nivå (
 |-------|--------|
 | `keep` | Skyddar PR/branch från stale- och cleanup-loopar |
 | `wip` | Skyddar PR från stale-loop; signalerar opågående arbete |
-| `needs-judge` | Sätts på dependabot major; signalerar att judge ska granska |
-| `judge-blocked` | Sätts av judge efter 2 `request_changes` i rad; signal till operatör |
+| `needs-judge` | Sätts på dependabot major av auto-merge-workflowen; informativ signal (historisk; review körs ändå på alla PR:er) |
+| `judge-blocked` | Sätts vid 2 `request_changes` i rad om review-escalation-workflowen aktiveras; signal till operatör |
 | `automation-failure` | Generiskt issue-label från eskalerings-workflow |
 | `cron-degraded` / `cron-paused` | Specifika fel i publish-loopen |
 | `release-blocked` | Release-PR har röd CI |
@@ -137,7 +139,7 @@ Squash, alltid. Commit-message = PR-titel. Default-inställning på repo-nivå (
 | `security` | Säkerhetsrelevant; skyddas från stale-loop |
 | `priority:critical` | Triggar eskaleringskanal (Telegram när aktiverat) |
 
-Hela labelsetet definieras i `.github/labels.json` och synkas via `gh label sync` vid setup.
+Hela labelsetet definieras i `.github/labels.json` och synkas via `gh label sync` (eller `./scripts/apply-policy.sh`) vid setup.
 
 ---
 
@@ -222,7 +224,7 @@ Saknas idag. Skapas innan publik konsumtion av templaten.
 
 ### Dependabot security alerts
 
-Aktiverade automatiskt eftersom repot är publikt. Security-PR:er behandlas som vanliga dependabot-PR:er av trustmatrisen — patch/minor auto-mergas, major går genom judge.
+Aktiverade automatiskt eftersom repot är publikt. Security-PR:er behandlas som vanliga dependabot-PR:er av trustmatrisen — auto-mergas när CI + review är gröna.
 
 ### AI-pipeline-specifik säkerhet
 
@@ -263,14 +265,14 @@ Aktiverade automatiskt eftersom repot är publikt. Security-PR:er behandlas som 
 
 **Får:**
 - Öppna PR:er.
-- Force-merga via admin-bypass i absolut nödläge (`enforce_admins: false` tillåter detta).
+- Force-merga via admin-bypass i absolut nödläge (rulesetet har bypass-actors för admin-roll).
 - Återställa `data/cron-state.json` när cron pausats.
 - Eskalera issues, stänga issues, anpassa labels.
 - Bumpa pin:ade modellversioner.
 
 **Får inte:**
-- Direkt-pusha till `main` (branch protection blockerar i normalflöde).
-- Approve sin egen PR (judge-checken kräver judge-bot).
+- Direkt-pusha till `main` (rulesetet blockerar i normalflöde).
+- Approve sin egen PR (review-checken kräver Claude GitHub App, som är en annan identitet).
 
 ### Implementer-agent (Claude Code i sessioner)
 
@@ -281,22 +283,21 @@ Aktiverade automatiskt eftersom repot är publikt. Security-PR:er behandlas som 
 
 **Får inte:**
 - Approve sin egen PR.
-- Merga utan att judge passat.
+- Merga utan att review passat.
 - Skriva secrets till committade filer.
-- Ändra `release-please-config.json`, `.github/branch-protection.json` eller `.github/judge-prompt.md` utan explicit uppdrag.
+- Ändra `release-please-config.json`, filer under `.github/rulesets/`, eller `.github/workflows/claude-code-review.yml` utan explicit uppdrag.
 
-### Judge-agent (workflow)
+### Reviewer-agent (Claude GitHub App via `claude-code-review.yml`)
 
 **Får:**
 - Läsa PR-diff, titel, beskrivning.
-- Posta review (approve / request_changes / comment).
-- Sätta `judge`-status check.
-- Öppna issue med `judge-blocked`-label efter 2 `request_changes` i rad.
+- Posta formell PR-review (approve / request_changes / comment) under Claude GitHub App-identiteten.
+- Sätta `Claude Code Review / claude-review`-status check.
 
 **Får inte:**
 - Skriva kod till repot.
-- Merga PR:er (separation of duties — judge granskar, auto-merge-workflowen agerar).
-- Konsumera secrets utöver `ANTHROPIC_API_KEY`.
+- Merga PR:er (separation of duties — reviewer granskar, auto-merge-workflowen agerar).
+- Konsumera secrets utöver `ANTHROPIC_API_KEY` (på både Actions- och Dependabot-scope).
 
 ### Dependabot
 

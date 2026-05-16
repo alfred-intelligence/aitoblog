@@ -1,0 +1,91 @@
+name: judge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: judge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  judge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]' &&
+      !startsWith(github.head_ref, 'release-please--')
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Compute diff
+        run: |
+          git fetch origin main --depth=200
+          git diff origin/main...HEAD --unified=3 > /tmp/pr-diff.patch
+          echo "Diff size: $(wc -c < /tmp/pr-diff.patch) bytes"
+
+      - name: Run judge
+        id: judge
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set +e
+          pnpm tsx scripts/judge.ts /tmp/pr-diff.patch > /tmp/judge.json 2> /tmp/judge.err
+          ec=$?
+          if [ "$ec" = "0" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            cat /tmp/judge.json
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo '::warning::judge script failed'
+            cat /tmp/judge.err >&2 || true
+          fi
+
+      - name: Post review and set verdict
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "${{ steps.judge.outputs.ok }}" != "true" ]; then
+            gh pr comment "$PR_NUMBER" --body "⚠️ The judge workflow could not complete — Anthropic API or parsing error. Falling back to neutral (no review posted). Operator: please review manually."
+            exit 0
+          fi
+
+          VERDICT=$(jq -r '.verdict' /tmp/judge.json)
+          SUMMARY=$(jq -r '.summary' /tmp/judge.json)
+          CONCERNS=$(jq -r '(.concerns // []) | if length == 0 then "" else "\n\n**Concerns:**\n" + (map("- " + .) | join("\n")) end' /tmp/judge.json)
+          SUGGESTIONS=$(jq -r '(.suggestions // []) | if length == 0 then "" else "\n\n**Suggestions:**\n" + (map("- " + .) | join("\n")) end' /tmp/judge.json)
+
+          BODY="${SUMMARY}${CONCERNS}${SUGGESTIONS}"$'\n\n---\n*Posted by judge loop. Verdict: `'"$VERDICT"'`.*'
+
+          case "$VERDICT" in
+            approve)
+              gh pr review "$PR_NUMBER" --approve --body "$BODY"
+              ;;
+            request_changes)
+              gh pr review "$PR_NUMBER" --request-changes --body "$BODY"
+              exit 1
+              ;;
+            comment|*)
+              gh pr review "$PR_NUMBER" --comment --body "$BODY"
+              ;;
+          esac

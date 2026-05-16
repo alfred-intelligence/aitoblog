@@ -1,0 +1,15 @@
+name: aitoblog CodeQL config
+
+# This config disables the "Unpinned tag for a non-immutable Action"
+# warning for trusted upstream maintainers. Rationale: the dependabot
+# github-actions ecosystem already keeps these actions current and signs
+# its commits; pinning to SHA would shift the maintenance burden onto
+# the operator without a meaningful security gain for these specific
+# orgs. Untrusted 3rd-party actions remain flagged.
+#
+# To re-enable a check: remove the entry from query-filters.
+
+query-filters:
+  - exclude:
+      id: actions/unpinned-tag
+      tags: security

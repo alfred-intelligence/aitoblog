@@ -1,13 +1,11 @@
 [
-  { "name": "stale",                "color": "ededed", "description": "PR has had no activity for 7+ days" },
-  { "name": "keep",                 "color": "0e8a16", "description": "Exempt from stale + branch-cleanup loops" },
-  { "name": "wip",                  "color": "1d76db", "description": "Work in progress — do not auto-process" },
-  { "name": "needs-judge",          "color": "0e8a16", "description": "Routed to judge loop for review" },
-  { "name": "judge-blocked",        "color": "d93f0b", "description": "Judge has requested changes twice without a title update" },
-  { "name": "drift",                "color": "fef2c0", "description": "SSoT or external compatibility drift detected" },
-  { "name": "cron-degraded",        "color": "fbca04", "description": "Publish cron has failed twice in a row" },
-  { "name": "cron-paused",          "color": "b60205", "description": "Publish cron auto-paused after 3 consecutive failures" },
-  { "name": "release-blocked",      "color": "b60205", "description": "Release-please PR has red CI — no new release possible" },
-  { "name": "automation-failure",   "color": "d73a4a", "description": "Generic loop or workflow failure (catch-all)" },
-  { "name": "priority:critical",    "color": "b60205", "description": "Operator attention required — automated escalation" }
+  { "name": "stale",              "color": "ededed", "description": "PR has had no activity for 7+ days" },
+  { "name": "keep",               "color": "0e8a16", "description": "Exempt from stale + branch-cleanup loops" },
+  { "name": "wip",                "color": "1d76db", "description": "Work in progress — do not auto-process" },
+  { "name": "drift",              "color": "fef2c0", "description": "SSoT or external compatibility drift detected" },
+  { "name": "cron-degraded",      "color": "fbca04", "description": "Publish cron has failed twice in a row" },
+  { "name": "cron-paused",        "color": "b60205", "description": "Publish cron auto-paused after 3 consecutive failures" },
+  { "name": "release-blocked",    "color": "b60205", "description": "Release-please PR has red CI — no new release possible" },
+  { "name": "automation-failure", "color": "d73a4a", "description": "Generic loop or workflow failure (catch-all)" },
+  { "name": "priority:critical",  "color": "b60205", "description": "Operator attention required — automated escalation" }
 ]

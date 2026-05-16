@@ -1,6 +1,6 @@
 # aitoblog — Agent-loop
 
-> Detta dokument beskriver hur agenter arbetar i `aitoblog`-projektet — implementer-agentens loop, judge-agentens loop, och kommunikationskontraktet dem emellan. Reglerna i `05-engineering-handbook.md §10` är input; detta dokument är *cykeln* som realiserar dem.
+> Detta dokument beskriver hur agenter arbetar i `aitoblog`-projektet — implementer-agentens loop, reviewer-agentens loop, och kommunikationskontraktet dem emellan. Reglerna i `05-engineering-handbook.md §10` är input; detta dokument är *cykeln* som realiserar dem.
 
 ---
 
@@ -8,7 +8,7 @@
 
 **Vald nivå:** `solo` + separation of duties.
 
-`solo` eftersom det finns en mänsklig operatör. Separation of duties eftersom implementer-agenten och judge-agenten är olika identiteter med olika scope och olika trigger-kanaler. Den invarianten gör att en `solo`-konfiguration uppfyller granskningsmål som annars hade krävt `solo+contrib`.
+`solo` eftersom det finns en mänsklig operatör. Separation of duties eftersom implementer-agenten och reviewer-agenten är olika identiteter med olika scope och olika trigger-kanaler. Den invarianten gör att en `solo`-konfiguration uppfyller granskningsmål som annars hade krävt `solo+contrib`.
 
 ---
 
@@ -18,11 +18,13 @@
 |-------|-----------|---------|------------|
 | Operatör | Människa | Manuell | Mellan sessioner |
 | Implementer-agent | `claude/<session-id>`-branch + chatt-session | Session start | Per session |
-| Judge-agent | `github-actions[bot]` via `judge.yml` | PR-event | Per PR-händelse |
+| Reviewer-agent | Claude GitHub App via `claude-code-review.yml` | PR-event | Per PR-händelse |
 | Auto-merge-workflow | `github-actions[bot]` via `auto-merge-trusted.yml` | PR-event | Per PR-händelse |
 | Release-please | `github-actions[bot]` | Push till `main` | Stateless |
 | Dependabot | `dependabot[bot]` | Schemalagd (vecka) | Stateless |
 | Cron-publish | `github-actions[bot]` via `publish.yml` | Schemalagd (mån/ons/fre) | State i `data/cron-state.json` |
+
+Reviewer-agentens identitet är **Claude GitHub App**, inte `github-actions[bot]`. När review postas på en PR visas det under en separat identitet — `Claude` — vilket gör implementer ≠ reviewer-invarianten till en hård struktur snarare än en konvention.
 
 ---
 
@@ -39,7 +41,7 @@
                               ↓
                    ... tills fasens steg är slut ...
                               ↓
-                    [öppna PR] → [vänta på judge] → [auto-merge sker]
+                    [öppna PR] → [vänta på review] → [auto-merge sker]
                               ↓
                          [fas/milstolpe klar]
 ```
@@ -66,7 +68,7 @@ Verifiering av förkrav (verktyg, secrets, konton) görs vid sessionstart. Sakna
 **Branch-strategi:**
 - Skapa branch `claude/<descriptive-name>` när första steget i en sammanhängande PR börjar.
 - Pusha efter varje verifierat steg — branchen är persistent state.
-- Öppna PR först när hela det sammanhängande arbetet är klart (inte per steg). Undantag: större arbeten där delvis-PR ger värde för judge-granskning — öppna då draft-PR med label `wip`.
+- Öppna PR först när hela det sammanhängande arbetet är klart (inte per steg). Undantag: större arbeten där delvis-PR ger värde för granskning — öppna då draft-PR med label `wip`.
 
 **Per steg:**
 1. **Välj nästa steg** ur 03-short-horizon eller från operatörens uppdrag.
@@ -98,12 +100,12 @@ När en sammanhängande arbetsuppsättning är klar:
 1. **Öppna PR** mot `main`. Titel följer Conventional Commits (commitlint enforced på titel).
 2. **PR-beskrivning** följer mallen i `.github/PULL_REQUEST_TEMPLATE.md` — Vad / Varför / Verifiering.
 3. **Vänta på checks:**
-   - `ci` (typecheck + build)
-   - `commitlint` (PR-titel)
-   - `judge` (review-verdict)
-4. **Vid `judge.verdict == approve`:** auto-merge slås på via `auto-merge-trusted.yml` (eller manuellt om implementeraren har explicit uppdrag att merga). PR mergas när alla checks gröna.
-5. **Vid `judge.verdict == request_changes`:** läs concerns + suggestions från judge-kommentaren, åtgärda, pusha. Judge granskar igen.
-6. **Vid `judge.verdict == comment`:** judge är osäker. Implementer-agenten ska antingen (a) lägga till tydligare PR-beskrivning som adresserar judge-concerns och pusha så judge re-evaluerar, eller (b) rapportera till operatören att mänsklig granskning behövs.
+   - `ci / build` (typecheck + build)
+   - `commitlint / commitlint` (PR-titel)
+   - `Claude Code Review / claude-review` (review-verdict)
+4. **Vid review-approve:** auto-merge slås på via `auto-merge-trusted.yml` (eller manuellt om implementeraren har explicit uppdrag att merga). PR mergas när alla checks gröna.
+5. **Vid review-request_changes:** läs concerns från PR-reviewen, åtgärda, pusha. Reviewer granskar igen.
+6. **Vid review-comment (neutral):** reviewer är osäker. Implementer-agenten ska antingen (a) lägga till tydligare PR-beskrivning som adresserar review-concerns och pusha så reviewer re-evaluerar, eller (b) rapportera till operatören att mänsklig granskning behövs.
 
 ### 3.6 Eskaleringsregler
 
@@ -113,7 +115,7 @@ När en sammanhängande arbetsuppsättning är klar:
 | Verktyg saknas (förkrav) | Rapportera och pausa. Gissa inte. |
 | Verifiering fail (`astro check` eller `build` röd) | Max 2 retries med åtgärd, sedan eskalera till operatör. |
 | Judge `request_changes` 2 ggr i rad utan att problemet löst | Rapportera till operatör. Loopa inte i tre. |
-| `judge`-workflowen själv fail (Anthropic API down etc.) | Vänta 15 min, pusha tom commit för att retrigga (eller använd `gh workflow run`). Om fortfarande fail: rapportera. |
+| `claude-code-review.yml` själv fail (Anthropic API down, startup_failure etc.) | Vänta 15 min, pusha tom commit för att retrigga (eller använd `gh workflow run`). Om fortfarande fail: rapportera. Kontrollera att `ANTHROPIC_API_KEY` finns på rätt scope (Actions + Dependabot). |
 | Förändring kräver avvikelse från 05/06 | Stoppa, dokumentera i `DECISIONS.md`, fråga operatör innan fortsatt. |
 
 ### 3.7 Termineringsvillkor
@@ -121,84 +123,64 @@ När en sammanhängande arbetsuppsättning är klar:
 | Nivå | "Klart" betyder |
 |------|-----------------|
 | Steg | Verifierat lokalt + rapporterat + operatör godkänd |
-| PR | Mergad (judge approve + CI grön + auto-merge slog till) |
+| PR | Mergad (review approve + CI grön + auto-merge slog till) |
 | Fas | Alla PR:er i fasen mergade, CI grön på `main`, milstolpa-villkor från 02 uppfyllt |
 | Projekt | Aldrig — kontinuerlig drift via cron-publish-loopen |
 
 ---
 
-## 4. Judge-loopen
+## 4. Review-loopen
 
 ### 4.1 Trigger och scope
 
-**Triggas på:** `pull_request: [opened, synchronize, reopened]`.
+**Triggas på:** `pull_request: [opened, synchronize, ready_for_review, reopened]`.
 
-**Skippas när:**
-- `github.actor == 'dependabot[bot]'`
-- `github.actor == 'github-actions[bot]'`
-- Branch matchar `release-please--*`
+**Inget actor-filter.** Loopen kör på *alla* PR:er — operatörens, `claude/*`-branches, dependabot, release-please. Filterfri kör motverkar hela klassen av "review skippas → required check rapporteras aldrig → PR blockeras evigt" som tidigare iteration brände av.
 
-### 4.2 Cykel
+### 4.2 Mekanism
 
-```
-[pull_request-event] → [checkout + diff] → [Anthropic API-anrop]
-                                                    ↓
-                                           [parsa JSON-respons]
-                                                    ↓
-                                  [posta review via gh pr review]
-                                                    ↓
-                                       [sätt judge-status check]
-```
+`anthropics/claude-code-action@v1` driver granskningen som GitHub Action. Action:en:
 
-Detta är en *händelse*-driven loop, inte en cyklisk. Varje PR-uppdatering → en judge-körning.
+1. Får PR-kontext (titel, body, diff) av GitHub Actions-runtime automatiskt.
+2. Anropar Claude med Anthropics curade granskningsprompt (pluginen `code-review@claude-code-plugins`).
+3. Postar PR-review under Claude GitHub App-identiteten (separat från `github-actions[bot]` och från operatören).
+4. Sätter status check `Claude Code Review / claude-review` baserat på review-verdict.
 
-### 4.3 Prompt-template
+Detta är en *händelse*-driven loop, inte en cyklisk. Varje PR-uppdatering → en granskningskörning.
 
-Prompten lever som separat fil `.github/judge-prompt.md` så den itereras utan workflow-ändring. Implementer-agenten producerar första versionen som artefakt; operatören kan editera direkt.
+### 4.3 Anpassning
 
-**Innehåll (sammanfattning av krav på prompten):**
+**Default:** Anthropics plugin används utan modifikation. Det är medvetet — den är curated för generell kodgranskning och uppdateras av Anthropic utan att kräva arbete i konsumentrepot.
 
-- Förklarar judge-rollen: granskning, inte implementation. Implementer ≠ judge.
-- Definierar verdict-trösklarna (när approve, när request_changes, när comment).
-- Specifikt: secrets i diff, ny dependency utan motivering, permissions-utvidgning, scope-expansion, regressionsrisk = `request_changes`.
-- Domänlogik som inte kan verifieras utan körning = `comment` (osäker).
-- Returnerar strikt JSON: `{verdict, summary, concerns[], suggestions[]}`.
+**Vid behov:** Pluginens beteende kan ersättas med en custom-sträng i `prompt:`-fältet i `claude-code-review.yml`. Lägg projekt-specifika regler där (t.ex. "flagga om PR rör `scripts/generate-post.ts` utan motivering" om det blir relevant). Iterera vid faktiskt behov, inte preventivt.
 
-Detaljerad prompt skrivs i Fas 4 Steg 2 (se 03-short-horizon).
+### 4.4 Output
 
-### 4.4 Output-kontrakt
+Action:en postar en formell GitHub PR review (inte en kommentar) med:
 
-Judge-svaret PARSAS som:
+- Sammanfattning av ändringen.
+- Concerns/observations grupperade per fil när relevant.
+- Verdict reflekterat i review-status (approve/request_changes/comment).
 
-```json
-{
-  "verdict": "approve" | "request_changes" | "comment",
-  "summary": "<2 meningar prosa>",
-  "concerns": ["<sträng>", ...],
-  "suggestions": ["<sträng>", ...]
-}
-```
+Verdict mappas till status check enligt action:ens default:
 
-Workflowen postar reviewen via `gh pr review`:
-
-| Verdict | gh-flagga | Status check `judge` |
-|---------|-----------|----------------------|
-| `approve` | `--approve` | success |
-| `request_changes` | `--request-changes` | failure (blockerar merge) |
-| `comment` | `--comment` | neutral (blockerar inte) |
+| Review-utfall | `Claude Code Review / claude-review` |
+|---------------|--------------------------------------|
+| Approve | success |
+| Request changes | failure (blockerar merge) |
+| Comment | neutral (blockerar inte) |
 
 ### 4.5 Eskaleringsregler
 
 | Situation | Åtgärd |
 |-----------|--------|
-| Anthropic API fail | Retry 1 gång efter 30 s. Vid fortsatt fail: status = neutral, kommentar "judge unavailable, manual review needed". Workflowen exit 0 (blockerar inte merge — det är operatörens beslut då). |
-| JSON-parsing fail | Retry 1 gång med skärpt prompt-instruktion. Vid fortsatt fail: samma som ovan — neutral + kommentar. |
-| 2 `request_changes` i rad på samma PR utan branch-titel-ändring | Workflowen lägger label `judge-blocked`, taggar i kommentar "@operatör manuell review rekommenderas". |
-| PR > 50 000 tokens diff | Trunkera och nämn i review-kommentaren att judge såg en trunkerad version. |
+| Anthropic API fail | Action:en exit:ar med fel → check röd → PR blockerad tills nästa push triggar en grön körning. Operatören kan välja att admin-bypassa via bypass-actor om akut. |
+| Action:en själv ger startup_failure | Vanligaste orsaken: `ANTHROPIC_API_KEY` saknas på dependabot-scope. Åtgärd: `gh secret set ANTHROPIC_API_KEY --app dependabot`. Se 06 §5. |
+| 2× `CHANGES_REQUESTED` på samma PR | *Optional:* separat workflow `review-escalation.yml` kan lyssna på `pull_request_review`-events, räkna per PR, lägga label `judge-blocked` vid 2 i rad. Implementeras endast om mönstret faktiskt uppstår. Onödigt initialt. |
 
 ### 4.6 Termineringsvillkor
 
-En judge-körning terminerar när review är postad och status check är satt. Det är inte en kontinuerlig loop — den vaknar per event och somnar igen.
+En granskningskörning terminerar när action:en exit:at och status check är satt. Det är inte en kontinuerlig loop — den vaknar per event och somnar igen.
 
 ---
 
@@ -208,18 +190,19 @@ Hela koordinationen mellan aktörer sker genom artefakter i GitHub, inte direkt 
 
 | Kanal | Producent | Konsument | Innehåll |
 |-------|-----------|-----------|----------|
-| PR-titel | Implementer | commitlint, release-please, judge, operatör | Conventional Commit-formatterat sammanfattning |
-| PR-beskrivning | Implementer | judge, operatör | Vad / Varför / Verifiering |
-| PR-review-kommentar | Judge | Implementer, operatör | Verdict + concerns + suggestions |
-| Status check `judge` | Judge | Branch protection | success / failure / neutral |
-| Status check `ci` | CI-workflow | Branch protection | success / failure |
+| PR-titel | Implementer | commitlint, release-please, reviewer, operatör | Conventional Commit-formatterat sammanfattning |
+| PR-beskrivning | Implementer | reviewer, operatör | Vad / Varför / Verifiering |
+| PR-review | Reviewer (Claude GitHub App) | Implementer, operatör | Approve / request_changes / comment med konkreta observationer |
+| Status check `Claude Code Review / claude-review` | Reviewer | Ruleset (required) | success / failure / neutral |
+| Status check `ci / build` | CI-workflow | Ruleset (required) | success / failure |
+| Status check `commitlint / commitlint` | Commitlint-workflow | Ruleset (required) | success / failure |
 | Labels på PR | Olika | Stale-loop, auto-merge, operatör | Tillståndssignaler (`wip`, `keep`, `judge-blocked`, `needs-judge` etc.) |
 | Issues | Eskalerings-workflows, operatör | Operatör | Eskaleringar |
 | `data/cron-state.json` | Cron-publish | Cron-publish (nästa körning), operatör | Sekventiellt tillstånd för publish-loopen |
 | `data/posted.json` | Cron-publish | Cron-publish (nästa körning) | Cooldown-spårning |
 | Chatt | Operatör + implementer | Varandra | Realtid under session |
 
-**Regel:** Ingen aktör läser en annan aktörs *interna* tillstånd. Implementer kan inte läsa judges arbete — bara dess output (review-kommentar). Judge kan inte läsa implementerns chatt-historik — bara dess output (PR-diff + beskrivning). Operatören kan läsa alla artefakter men interagerar primärt via chatt (med implementer), labels och PR-godkännande.
+**Regel:** Ingen aktör läser en annan aktörs *interna* tillstånd. Implementer kan inte läsa reviewer:s arbete — bara dess output (PR-review). Reviewer kan inte läsa implementerns chatt-historik — bara dess output (PR-diff + beskrivning). Operatören kan läsa alla artefakter men interagerar primärt via chatt (med implementer), labels och PR-godkännande.
 
 ---
 
@@ -258,7 +241,7 @@ Operatörens närvaro krävs:
 
 Operatören krävs *inte*:
 
-- För att merga PR:er som passerar judge + CI (auto-merge sker).
+- För att merga PR:er som passerar review + CI (auto-merge sker).
 - För att hantera dependabot patch/minor (auto-merge sker).
 - För att skära releaser (release-please + auto-merge).
 - För daglig drift (cron + looparna i 06 hanterar).
@@ -271,7 +254,7 @@ Detta är vad "unattended" betyder för aitoblog: operatörens närvaro är *nö
 
 - **Implementer godkänner sin egen PR** — invarianten bryts. Branch protection ska blockera detta men låt det inte ens prövas.
 - **Judge skriver kod till repot** — bryter scope. Judge granskar; implementer implementerar.
-- **Operatören mergar utan att judge passat** — i nödläge är det tekniskt möjligt via admin-bypass, men ska dokumenteras i `DECISIONS.md` när det sker.
+- **Operatören mergar utan att review passat** — i nödläge är det tekniskt möjligt via admin-bypass, men ska dokumenteras i `DECISIONS.md` när det sker.
 - **Agenten ändrar i 05/06/07 utan explicit uppdrag** — designdokumenten är inte arbetsmaterial för implementer-rollen.
 - **Mer än en agent samtidigt på samma branch** — branch är persistent state per implementer-session. Två samtidiga sessioner på samma branch leder till merge-konflikter och förlorat arbete.
 - **Loop utan terminering** — varje cykel (steg, PR, review) har ett tydligt slut. Implementer-agenten *stannar* när rapporten är skickad och väntar.

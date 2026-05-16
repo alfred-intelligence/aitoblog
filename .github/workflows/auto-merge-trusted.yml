@@ -2,7 +2,7 @@ name: auto-merge-trusted
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: write
@@ -14,32 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Fetch dependabot metadata
-        id: meta
-        uses: dependabot/fetch-metadata@v2
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Trust patch/minor and any github-actions bump
-        if: >-
-          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
-          steps.meta.outputs.update-type == 'version-update:semver-minor' ||
-          steps.meta.outputs.package-ecosystem == 'github_actions'
+      - name: Enable auto-merge on dependabot PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          echo "Enabling auto-merge on $PR_URL (type=${{ steps.meta.outputs.update-type }}, ecosystem=${{ steps.meta.outputs.package-ecosystem }})"
+          echo "Enabling auto-merge on dependabot PR $PR_URL"
           gh pr merge --auto --squash "$PR_URL"
-
-      - name: Route major bumps to judge
-        if: steps.meta.outputs.update-type == 'version-update:semver-major'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          echo "Major bump detected (${{ steps.meta.outputs.dependency-names }}) — labeling for judge review"
-          gh pr edit "$PR_NUMBER" --add-label needs-judge
 
   release-please:
     if: >-

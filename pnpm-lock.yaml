@@ -9,10 +9,10 @@ importers:
   .:
     dependencies:
       '@anthropic-ai/sdk':
-        specifier: ^0.95.1
+        specifier: ^0.95.0
         version: 0.95.1(zod@3.25.76)
       '@astrojs/rss':
-        specifier: ^4.0.18
+        specifier: ^4.0.0
         version: 4.0.18
       '@mozilla/readability':
         specifier: ^0.5.0
@@ -27,20 +27,20 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3
       jsdom:
-        specifier: ^25.0.1
+        specifier: ^25.0.0
         version: 25.0.1
       octokit:
-        specifier: ^4.1.4
+        specifier: ^4.0.0
         version: 4.1.4
       zod:
-        specifier: ^3.25.76
+        specifier: ^3.23.0
         version: 3.25.76
     devDependencies:
       '@astrojs/check':
-        specifier: ^0.9.9
+        specifier: ^0.9.0
         version: 0.9.9(prettier@3.8.3)(typescript@5.9.3)
       '@commitlint/cli':
-        specifier: ^19.8.1
+        specifier: ^19.5.0
         version: 19.8.1(@types/node@22.19.18)(typescript@5.9.3)
       '@commitlint/config-conventional':
         specifier: ^21.0.0
@@ -49,16 +49,16 @@ importers:
         specifier: ^21.1.7
         version: 21.1.7
       '@types/node':
-        specifier: ^22.19.18
+        specifier: ^22.0.0
         version: 22.19.18
       husky:
-        specifier: ^9.1.7
+        specifier: ^9.1.0
         version: 9.1.7
       tsx:
-        specifier: ^4.21.0
+        specifier: ^4.19.0
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
+        specifier: ^5.6.0
         version: 5.9.3
 
 packages:

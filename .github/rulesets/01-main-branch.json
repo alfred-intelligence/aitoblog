@@ -1,0 +1,42 @@
+{
+  "name": "main-branch-protection",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [
+    { "actor_type": "OrganizationAdmin", "actor_id": null, "bypass_mode": "always" },
+    { "actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "always" }
+  ],
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "required_linear_history" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": ["squash"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "required_status_checks": [
+          { "context": "ci / build", "integration_id": 15368 },
+          { "context": "commitlint / commitlint", "integration_id": 15368 },
+          { "context": "Claude Code Review / claude-review", "integration_id": 15368 }
+        ]
+      }
+    }
+  ]
+}

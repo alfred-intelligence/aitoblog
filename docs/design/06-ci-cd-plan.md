@@ -18,24 +18,25 @@ Varje workflow i `.github/workflows/` är implementeringen av en sådan slinga. 
 
 ## 2. Trustmatris
 
-Trustmatrisen styr vem som får merga till `main` utan judge-granskning. Den är den enda regel som skiljer "auto-merge" från "kräver review" — inga andra trösklar krävs.
+Trustmatrisen styr **vem som får auto-merga** när alla required checks är gröna. Den styr *inte* vem som granskas — claude-code-action (Loop 4 §4.4) kör som blockerande grind på *alla* PR:er utan filter, inklusive dependabot och release-please. Det är medvetet: filtreringen jag tidigare designade in skapade den klass av problem som denna revidering retar bort.
 
-| Aktör | Scope | Auto-merge utan judge? |
-|-------|-------|------------------------|
+| Aktör | Scope | Auto-merge när checks gröna? |
+|-------|-------|------------------------------|
 | `dependabot[bot]` | npm patch + minor | **Ja** |
-| `dependabot[bot]` | npm major | Nej — går genom judge |
-| `dependabot[bot]` | github-actions | **Ja** (alla typer) |
-| `github-actions[bot]` på branch `release-please--*` | Release-PR (version + CHANGELOG) | **Ja** |
+| `dependabot[bot]` | npm major | **Ja** (review fångar breaking changes som röd check) |
+| `dependabot[bot]` | github-actions | **Ja** |
+| `github-actions[bot]` på branch `release-please--*` | Release-PR | **Ja** |
 | `github-actions[bot]` övrigt | — | Nej (ska inte uppstå) |
-| Människa eller `claude/*`-branch | All annan kod | Nej — kräver judge |
+| Människa eller `claude/*`-branch | All annan kod | Nej — manuell merge (eller `gh pr merge --auto`) |
 
 **Motivering:**
 
-- Dependabot patch/minor är mekanisk; CI fångar regressioner. Risk × frekvens × tid att åtgärda > värdet av att läsa varje sådan PR.
-- Dependabot major kan kräva kod-ändringar. Judge granskar och kan godkänna mekaniska bumpar med oförändrad API men flagga riktiga breaking changes.
-- GitHub Actions-bumpar är alltid mekaniska (action-versioner är pin:ade per SHA i värsta fall).
-- Release-please skapar deterministisk diff (version + CHANGELOG från Conventional Commits). Det finns ingenting i den PR:n som behöver judge.
-- Allt annat (inklusive operatörens egna PR:er) går genom judge eftersom *implementer ≠ reviewer* är en hård invariant.
+- Dependabot patch/minor är mekaniska; review är snabb och billig.
+- Dependabot major fångas av claude-code-action på samma sätt som av en human reviewer — om diffen visar breaking API-ändring blir checken röd. Ingen separat path-genom-judge krävs.
+- Release-please skapar deterministisk diff men granskas ändå — det är näst intill gratis och håller invarianten ren ("review körs alltid").
+- Allt annat går genom samma grind. Operatörens egna PR:er och `claude/*`-branches är inte privilegierade.
+
+Att ta bort filtret är vad som skiljer denna iteration från den första — det löser dependabot-secret-scope-problemet i samma sköld.
 
 ---
 
@@ -53,9 +54,9 @@ Versionsdrift mellan filer är en återkommande felklass. SSoT eliminerar den.
 
 - Workflows **får inte** ha hårdkodade versionsnummer (`node-version: 20`). De ska läsa från SSoT-filen.
 - `engines.node` och `.nvmrc` kontrolleras av drift-loopen (§4.6) varje vecka — om de glider isär eller från Astros peer-deps öppnas issue.
-- Astros version bumpas av Dependabot; major-bumpar går genom judge som verifierar `engines`-kompatibilitet.
+- Astros version bumpas av Dependabot; major-bumpar går genom review som verifierar `engines`-kompatibilitet.
 
-**Konsekvens för befintlig kod:** `ci.yml`, `publish.yml`, `commitlint.yml`, `release-please.yml`, `judge.yml` (ny) ska alla refaktoreras till `node-version-file: .nvmrc`. En commit. Sedan finns "Node 20 vs 22"-klassen av fel inte längre.
+**Konsekvens för befintlig kod:** `ci.yml`, `publish.yml`, `commitlint.yml`, `release-please.yml` ska alla refaktoreras till `node-version-file: .nvmrc`. En commit. Sedan finns "Node 20 vs 22"-klassen av fel inte längre. (`claude-code-review.yml` använder `actions/checkout@v4` direkt utan setup-node och berörs inte.)
 
 ---
 
@@ -87,7 +88,7 @@ Varje loop dokumenteras med samma fält: **Syfte → Trigger → Mekanism → Gr
 
 **Stängning:** PR mergad → branch raderad (auto-delete head branches på).
 
-**Eskalering:** Om CI röd på dependabot-PR i >24h: stale-loopen (4.7) hanterar. Om same PR re-öppnas av dependabot efter rebase med samma röda CI tre gånger i rad: judge-loopen kan flaggas för att granska om dependency-grupperingen är fel.
+**Eskalering:** Om CI röd på dependabot-PR i >24h: stale-loopen (4.7) hanterar. Om same PR re-öppnas av dependabot efter rebase med samma röda CI tre gånger i rad: review-loopen kan flaggas för att granska om dependency-grupperingen är fel.
 
 **Filer:** `.github/workflows/auto-merge-trusted.yml`, `.github/dependabot.yml` (befintlig).
 
@@ -145,55 +146,58 @@ Varje loop dokumenteras med samma fält: **Syfte → Trigger → Mekanism → Gr
 
 ---
 
-### 4.4 Loop 4 — PR-judge
+### 4.4 Loop 4 — PR-review
 
 **Syfte:** Separera implementer från reviewer. Säkerställa att kod som rör inte-mekaniska delar av repot granskas av en annan identitet än den som skrev den.
 
-**Trigger:** `pull_request: [opened, synchronize, reopened]`.
+**Mekanism:** [`anthropics/claude-code-action@v1`](https://github.com/anthropics/claude-code-action) — Anthropics officiella GitHub Action. Den postar PR-reviews under en separat Claude GitHub App-identitet (inte `github-actions[bot]`), vilket gör implementer ≠ reviewer-invarianten till en hård struktur, inte en konvention.
 
-**Filter (skippa när):**
-- `github.actor == 'dependabot[bot]'` (loop 1 hanterar).
-- `github.actor == 'github-actions[bot]'` (release-please).
-- Branch matchar `release-please--*`.
+**Trigger:** `pull_request: [opened, synchronize, ready_for_review, reopened]`.
 
-**Mekanism:**
+**Konfiguration:**
 
-1. Checkout med `fetch-depth: 0` (för att kunna diffa mot base).
-2. Compute diff: `git diff origin/main...HEAD --unified=3`. Trunkera till ~50 000 tokens om större.
-3. Anrop till Anthropic API (`claude-sonnet-4-6` eller senare stable — versions-pin:as i workflow via env var).
-4. Prompt-template (egen fil `.github/judge-prompt.md` så den iterereras utan workflow-ändring).
-5. Parsa strukturerad JSON-respons:
-   ```json
-   {
-     "verdict": "approve" | "request_changes" | "comment",
-     "summary": "...",
-     "concerns": ["..."],
-     "suggestions": ["..."]
-   }
-   ```
-6. Posta review via `gh pr review`:
-   - `approve` → `gh pr review --approve --body "$(summary)"`
-   - `request_changes` → `gh pr review --request-changes --body "$(summary + concerns)"`
-   - `comment` → `gh pr review --comment --body "$(summary + concerns)"` (osäker, vill ha mänsklig blick)
-7. Sätt status check `judge` enligt verdict (success / failure / neutral).
+```yaml
+name: Claude Code Review
 
-**Säkerhet:**
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
 
-- Triggern är `pull_request`, **inte** `pull_request_target` — fork-PR:er får inte secrets.
-- `permissions: { contents: read, pull-requests: write, issues: write }`.
-- `concurrency: { group: judge-${{ github.event.pull_request.number }}, cancel-in-progress: true }` — bara senaste pushen granskas.
-- Modellnamn pin:as i workflow för reproducerbarhet; bumpas via egen PR.
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+```
 
-**Grind:** Judge måste passa (status check) + CI grön. Branch protection enforced.
+**Grind:** Status check `Claude Code Review / claude-review` är required i rulesetet (06 §5). PR mergas inte utan att checken är grön. Verdict från modellen reflekteras genom action:ens exit-code: approve → green check, request_changes → red check, comment → neutral.
 
-**Stängning:** Verdict `approve` → status check grön → om actor är trusted för auto-merge: merge. Annars väntar på `gh pr merge` från operatör eller Claude Code.
+**Filterfri.** Till skillnad från en custom workflow med write-permissions och egna secrets, kör claude-code-action utan startup-friction på dependabot- och release-please-PR:er. Den behöver `read`-permissions + en Anthropic-secret som dependabot-scope kan dela. Detta eliminerar hela klassen av "judge filtrerar bort dependabot men checken är required" som blockerade en tidigare iteration av denna loop.
+
+**Stängning:** Verdict approve → grön check → PR mergas via Loop 1/2 (auto-merge-trusted) eller manuellt enligt trustmatris.
 
 **Eskalering:**
 
-- Två `request_changes` i rad utan att PR-titel ändrats → workflowen kommenterar `@operatör manuell granskning rekommenderas` och sätter label `judge-blocked`.
-- `judge`-workflowen själv fail (Anthropic API down etc.): status = neutral (inte failure), kommentar postas, en retry inom workflow:n är OK men ingen blockering. Branch protection ska tillåta `judge`-checken vara `success` ELLER `neutral` (inte kräva success — annars blir judge-utfall en hård SPOF).
+- Mekanisk: röd check blockerar merge tills modellen approve:ar nästa push.
+- Mönsterbaserad: separat liten workflow `review-escalation.yml` *kan* lyssna på `pull_request_review`-events och räkna `CHANGES_REQUESTED` per PR. Vid 2 i rad: lägg label `judge-blocked` och tagga operatören. **Implementeras först om mönstret faktiskt uppstår** — onödig komplexitet annars.
+- Anthropic API/action själv fail: status check blir röd (eller skipped vid GitHub-sida-utfall). Behandlas som vilken CI-fel som helst: åtgärda eller manuellt mergea via admin-bypass (operatören har den).
 
-**Filer:** `.github/workflows/judge.yml` (ny), `.github/judge-prompt.md` (ny, iterereras separat).
+**Filer:** `.github/workflows/claude-code-review.yml` (befintlig — bygger på Anthropics action). *Inte* en custom judge-workflow, inget tsx-script, ingen egen prompt-fil. Anthropics plugin `code-review@claude-code-plugins` driver review-logiken.
+
+**Anpassning av prompt:** Om defaultpluginens granskning inte räcker, byt ut `plugins:`-fältet mot en explicit `prompt:`-sträng med projektets specifika regler. Det kan göras senare, behövs sannolikt inte initialt.
 
 ---
 
@@ -290,55 +294,81 @@ PR:er från `release-please--*` filtreras bort via custom action eller via label
 
 ## 5. Branch protection & repo-inställningar
 
-**Branch protection på `main`** (sätts via `gh api` eller manuellt — bör committas som `.github/branch-protection.json` så det är dokumenterat):
+Sätts via Repository Rulesets (2026-ersättningen för legacy "branch protection rules"). Källfiler committas i `.github/rulesets/` så de versionshanteras.
+
+**Rulesets:**
+
+| Fil | Scope | Skyddar |
+|-----|-------|---------|
+| `.github/rulesets/01-main-branch.json` | `~DEFAULT_BRANCH` | PR-krav, required status checks, linear history, ingen radering eller force-push |
+| `.github/rulesets/02-release-tags.json` | `refs/tags/v*` | Ingen radering eller force-push på release-tags |
+
+**Required status checks på main:**
+
+| Context | Integration | Rapporterar |
+|---------|-------------|-------------|
+| `ci / build` | GitHub Actions (15368) | Typecheck + build grön |
+| `commitlint / commitlint` | GitHub Actions (15368) | PR-titel följer Conventional Commits |
+| `Claude Code Review / claude-review` | GitHub Actions (15368) | claude-code-action har approved |
+
+Context-strängen formatteras alltid `<workflow-name> / <job-name>`. GitHub matchar bytvis — trailing whitespace, fel case, eller fel skiljetecken gör att checken aldrig matchas och PR:n fastnar i "Expected — Waiting for status to be reported".
+
+**PR-rule (i `01-main-branch.json`):**
 
 ```json
 {
-  "required_status_checks": {
-    "strict": true,
-    "checks": [
-      { "context": "ci" },
-      { "context": "commitlint" },
-      { "context": "judge" }
-    ]
-  },
-  "enforce_admins": false,
-  "required_pull_request_reviews": null,
-  "restrictions": null,
-  "required_linear_history": true,
-  "allow_force_pushes": false,
-  "allow_deletions": false,
-  "block_creations": false,
-  "required_conversation_resolution": false,
-  "lock_branch": false,
-  "allow_fork_syncing": true
+  "type": "pull_request",
+  "parameters": {
+    "required_approving_review_count": 0,
+    "required_reviewers": [],
+    "allowed_merge_methods": ["squash"]
+  }
 }
 ```
 
-**Notera:**
-- `required_pull_request_reviews: null` — vi använder *inte* GitHubs review-system som grind. Judge-checken är grinden. Detta är medvetet: GitHub kräver att review kommer från en användare med skrivåtkomst, vilket är operatören själv, vilket gör review självgranskning. Judge som status check istället låter `github-actions[bot]` vara den blockerande granskaren.
-- `enforce_admins: false` — operatören kan i nödfall force-merga, vilket är rätt eskaleringsväg när alla loopar gått sönder.
-- `required_linear_history: true` — squash-only, ger ren tagghistorik och enkel CHANGELOG.
+`required_approving_review_count: 0` är medvetet. GitHubs review-mekanism kräver att approval kommer från en användare med skrivåtkomst — vilket i ett solo-repo är operatören själv. Att kräva 1+ skulle tvinga self-approval, vilket bryter implementer ≠ reviewer-invarianten.
 
-**Repo-inställningar** (Settings → General):
+Istället är `Claude Code Review / claude-review`-checken grinden. Den postas av Claude GitHub App (separat identitet från operatören och från `github-actions[bot]`), vilket ger separation of duties som hård struktur — inte en konvention.
+
+**Bypass-actors:**
+
+```json
+"bypass_actors": [
+  { "actor_type": "OrganizationAdmin", "actor_id": null, "bypass_mode": "always" },
+  { "actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "always" }
+]
+```
+
+Operatören har bypass via admin-rollen — nödutgång när hela automation-stacken går sönder samtidigt. Bots listas *inte* som bypass; de följer reglerna och får merga via auto-merge-workflowen + gröna checks.
+
+**Repo-inställningar (`.github/repo-settings.json`):**
 
 - Default merge method: Squash
 - Default commit message: PR title
 - Allow auto-merge: PÅ
 - Automatically delete head branches: PÅ
 - Allow force-pushing: AV
-- Allow deletions: AV (för main)
+- Allow deletions: AV
 
 **Secrets & variables:**
 
 | Namn | Typ | Scope | Syfte |
 |------|-----|-------|-------|
-| `ANTHROPIC_API_KEY` | Secret | Actions | Publish + judge |
+| `ANTHROPIC_API_KEY` | Secret | Actions | Publish (cron) |
+| `ANTHROPIC_API_KEY` | Secret | Dependabot | Claude Code Review när workflow triggas av dependabot |
 | `ALFRED_TG_TOKEN` | Secret | Actions | Telegram-eskalering (optional) |
 | `ALFRED_TG_CHAT_ID` | Variable | Actions | Telegram-eskalering (optional) |
 | `SOURCES_URL` | Variable | Actions | Publish-källor |
 
+**Dependabot-scope för `ANTHROPIC_API_KEY` är kritiskt.** Dependabot-triggade workflows läser secrets från ett separat scope (`Settings → Secrets and variables → Dependabot`). Saknas det får workflowen `startup_failure` på dependabot-PR:er, vilket gör review-checken aldrig grön → PR:erna blockeras evigt. Sätt sec­ret på båda scopes (Actions + Dependabot) med samma värde:
+
+```bash
+gh secret set ANTHROPIC_API_KEY                  # Actions-scope
+gh secret set ANTHROPIC_API_KEY --app dependabot # Dependabot-scope
+```
+
 Saknas `ALFRED_TG_TOKEN` → eskalerings-workflowen skippar Telegram-steget graceful, öppnar bara issue.
+
 
 ---
 
@@ -354,7 +384,7 @@ Två kanaler, alltid båda när relevant, men Telegram är opportunistisk:
   - `cron-paused` (3 fel → cron pausad)
   - `release-blocked` (release-PR CI röd)
   - `drift` (drift-detektor fynd)
-  - `judge-blocked` (judge avslår 2x)
+  - `judge-blocked` (reviewer avslår 2x)
   - `priority:critical` läggs till på cron-paused och release-blocked
 
 - Mall: kort beskrivning + link till workflow-run + sista loggraderna + suggested action.
@@ -398,16 +428,17 @@ När operatören migrerar till privat repo via "Use this template":
 
 **Behålls i template:**
 - Alla workflows (loop 1–7).
-- Branch protection-config (`.github/branch-protection.json`) som dokumentation, måste appliceras manuellt en gång efter klon (eller via `gh` script i `IMPORT.md`).
+- Rulesets-källfiler (`.github/rulesets/*.json`), appliceras via `./scripts/apply-policy.sh` enligt `IMPORT.md`.
 - Repo-inställnings-config (`.github/repo-settings.json`).
+- Labels-fil (`.github/labels.json`).
 - Trustmatris och denna plan som dokumentation.
 
 **Bryts av template-klon:**
 - `data/cron-state.json` — initieras tomt.
 - `data/posted.json` — initieras tomt.
-- Secrets — måste sättas på nytt i det nya repot.
+- Secrets — måste sättas på nytt i det nya repot (både Actions- och Dependabot-scope för `ANTHROPIC_API_KEY`).
 
-**IMPORT.md** (en del av bootstrap, inte denna plan) listar de `gh`-kommandon som måste köras efter klon för att applicera branch protection och repo settings. Allt annat är passivt klar.
+**IMPORT.md** (en del av bootstrap, inte denna plan) listar de `gh`-kommandon som måste köras efter klon för att applicera rulesets, repo settings, labels, och sätta secrets på rätt scopes. Allt annat är passivt klart.
 
 ---
 
@@ -417,7 +448,6 @@ Slutligt målmaterial när alla loopar är implementerade.
 
 ```
 .github/
-├── branch-protection.json        # SSoT för branch-protection-config
 ├── dependabot.yml                # Befintlig
 ├── ISSUE_TEMPLATE/
 │   ├── bug_report.md             # Befintlig
@@ -425,19 +455,21 @@ Slutligt målmaterial när alla loopar är implementerade.
 │   ├── feature_request.md        # Befintlig
 │   └── automation-failure.md     # Ny — mall för loop-eskaleringsissues
 ├── PULL_REQUEST_TEMPLATE.md      # Befintlig
-├── judge-prompt.md               # Ny — judge-promptens text, itereras separat
-├── labels.json                   # Ny — labels: stale, keep, wip, needs-judge,
-│                                 #       judge-blocked, drift, cron-degraded,
-│                                 #       cron-paused, release-blocked,
-│                                 #       automation-failure, priority:critical
-├── repo-settings.json            # Ny — SSoT för repo-inställningar
+├── labels.json                   # Ny — labels: stale, keep, wip, drift,
+│                                 #       cron-degraded, cron-paused,
+│                                 #       release-blocked, automation-failure,
+│                                 #       judge-blocked, priority:critical, m.fl.
+├── repo-settings.json            # Ny — repo-level settings (auto-delete, squash)
+├── rulesets/
+│   ├── 01-main-branch.json       # Ny — required checks, PR-rule, linear history
+│   └── 02-release-tags.json      # Ny — skydd för v*-tags
 └── workflows/
     ├── ci.yml                    # Befintlig, refaktoreras till .nvmrc
     ├── commitlint.yml            # Befintlig, refaktoreras till .nvmrc
     ├── release-please.yml        # Befintlig
     ├── publish.yml               # Befintlig, refaktoreras (state-fil, retry, paus)
+    ├── claude-code-review.yml    # Befintlig — Loop 4 (review-grind)
     ├── auto-merge-trusted.yml    # Ny — loop 1 & 2
-    ├── judge.yml                 # Ny — loop 4
     ├── cron-watchdog.yml         # Ny — loop 3 eskalering
     ├── branch-cleanup.yml        # Ny — loop 5
     ├── drift-check.yml           # Ny — loop 6
@@ -445,7 +477,7 @@ Slutligt målmaterial när alla loopar är implementerade.
     └── escalate.yml              # Ny — Telegram för priority:critical
 ```
 
-Totalt: 7 nya workflows. 3 nya konfig-filer. 1 ny issue-template. 2 refaktorerade existerande workflows. 2 nya data-filer.
+Totalt: 6 nya workflows. 2 ruleset-filer + 2 övriga konfig-filer. 1 ny issue-template. 2 refaktorerade existerande workflows. 2 nya data-filer. Inga egna review-skript — claude-code-action driver review-loopen.
 
 ---
 
@@ -454,9 +486,9 @@ Totalt: 7 nya workflows. 3 nya konfig-filer. 1 ny issue-template. 2 refaktorerad
 Looparna är inte oberoende. Ordningen är optimerad så varje loop landar med en stängd grind under sig:
 
 1. **Steg 0 — SSoT.** `.nvmrc` + `engines` + refaktorera ci.yml/commitlint.yml/publish.yml/release-please.yml till `node-version-file`. Stänger Node-driften.
-2. **Steg 1 — labels.json + branch-protection.json applicerade.** Förutsättning för alla checks.
-3. **Steg 2 — Loop 4 (judge).** Måste finnas före auto-merge eftersom auto-merge förlitar sig på att judge-checken finns på PR:er som inte är trusted.
-4. **Steg 3 — Loop 1 + 2 (auto-merge-trusted).** Stänger dependency- och release-looparna direkt — alla kvarliggande PR:er rensas.
+2. **Steg 1 — labels + repo-settings + rulesets (initial-fas).** Källfiler committas. Apply-skriptet kör i `--phase=initial` (utan claude-code-review som required check). Förutsättning för senare steg.
+3. **Steg 2 — Loop 4 (claude-code-review).** Säkerställ att `claude-code-review.yml` kör grön på alla PR-typer (operatör, dependabot, release-please). Inkluderar verifiering att `ANTHROPIC_API_KEY` är satt på *både* Actions- och Dependabot-scope. När verifierat → uppdatera ruleset med `--phase=final` så `Claude Code Review / claude-review` blir required.
+4. **Steg 3 — Loop 1 + 2 (auto-merge-trusted).** Stänger dependency- och release-looparna direkt — backlog rensas automatiskt.
 5. **Steg 4 — Loop 5 (branch-cleanup) + auto-delete on merge.** Rensar skräpbranches.
 6. **Steg 5 — Loop 3 (cron-watchdog + state).** Hardenar publish.
 7. **Steg 6 — Loop 6 (drift) + Loop 7 (stale).** Lågfrekventa, kan komma sist.

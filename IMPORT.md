@@ -41,7 +41,7 @@ Missing Telegram credentials is fine — `escalate.yml` (when added) skips the T
 ./scripts/apply-policy.sh
 ```
 
-This applies labels, repo-settings, and rulesets. Required status checks on `main`: `ci / build`, `commitlint / commitlint`. PR-rule, linear history, bypass-actors, and tag protection are all enforced.
+This applies labels, repo-settings, and rulesets. Required status checks on `main`: `ci / build (pull_request)`, `commitlint / commitlint (pull_request)` — the `(pull_request)`-suffix matches what GitHub Actions actually posts as the check-run context. PR-rule, linear history, bypass-actors, and tag protection are all enforced.
 
 ## 3. Auto-merge for trusted bots
 

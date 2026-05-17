@@ -33,8 +33,7 @@
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
           { "context": "ci / build", "integration_id": 15368 },
-          { "context": "commitlint / commitlint", "integration_id": 15368 },
-          { "context": "Claude Code Review / claude-review", "integration_id": 15368 }
+          { "context": "commitlint / commitlint", "integration_id": 15368 }
         ]
       }
     }

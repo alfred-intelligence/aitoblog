@@ -1,0 +1,61 @@
+name: pruner
+
+# Deletes branches >30 days old with no open PR and no `keep` label.
+# Skips main and release-please--*. Pruning shears, not a chainsaw.
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Sunday 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prune stale branches
+        env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          CUTOFF_EPOCH=$(date -u -d '30 days ago' +%s)
+          DELETED=0
+          KEPT=0
+
+          while read -r branch; do
+            case "$branch" in
+              main|release-please--*)
+                KEPT=$((KEPT + 1)); continue ;;
+            esac
+
+            # Open PR for this head? Keep.
+            OPEN=$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq 'length')
+            if [ "$OPEN" -gt 0 ]; then
+              KEPT=$((KEPT + 1)); continue
+            fi
+
+            # Any PR (open or closed) with `keep` label for this head? Keep.
+            KEEP=$(gh pr list -R "$REPO" --head "$branch" --state all --label keep --json number --jq 'length')
+            if [ "$KEEP" -gt 0 ]; then
+              KEPT=$((KEPT + 1)); continue
+            fi
+
+            # Recent commit? Keep.
+            DATE=$(gh api "repos/$REPO/branches/$branch" --jq '.commit.commit.committer.date')
+            DATE_EPOCH=$(date -u -d "$DATE" +%s)
+            if [ "$DATE_EPOCH" -ge "$CUTOFF_EPOCH" ]; then
+              KEPT=$((KEPT + 1)); continue
+            fi
+
+            echo "DELETE $branch (last commit $DATE)"
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$branch" || echo "  (delete failed for $branch — skipping)"
+            DELETED=$((DELETED + 1))
+          done < <(gh api "repos/$REPO/branches" --paginate --jq '.[] | select(.protected | not) | .name')
+
+          echo
+          echo "Pruner done: $DELETED deleted, $KEPT kept." | tee -a "$GITHUB_STEP_SUMMARY"

@@ -9,8 +9,6 @@ aitoblog ships its repo policy as code under `.github/`:
 
 GitHub does not auto-apply these from disk. The companion `scripts/apply-policy.sh` reads them and calls the REST API. Run it once after this PR lands, and re-run whenever you clone this repo via "Use this template".
 
-**Order matters.** The CI/CD plan (`docs/design/06-ci-cd-plan.md` §10) lays out a two-phase sequence so each grind is in place before the loop that depends on it.
-
 Prerequisites: `gh` CLI authenticated against an account with admin rights on the repo, plus `jq`.
 
 ```bash
@@ -20,75 +18,57 @@ export REPO=aitoblog
 
 ## 1. Provision secrets
 
-`ANTHROPIC_API_KEY` is read by both the publish loop (Actions scope) and Claude Code Review on dependabot-triggered runs (Dependabot scope). **Set both.**
+`ANTHROPIC_API_KEY` is read by the publish loop only. Set on the Actions scope:
 
 ```bash
-gh secret set ANTHROPIC_API_KEY                  -R "$OWNER/$REPO"
-gh secret set ANTHROPIC_API_KEY --app dependabot -R "$OWNER/$REPO"
+gh secret set ANTHROPIC_API_KEY -R "$OWNER/$REPO"
 ```
 
-This is critical. Without the Dependabot-scope copy, `Claude Code Review` fails with `startup_failure` on every dependabot PR — the required check never posts green, and every dependabot PR is blocked forever (docs §5).
+No Dependabot-scope secret is needed anymore — there is no AI in the PR-review path (see docs/design/06-ci-cd-plan.md §4.4 on why Loop 4 was removed).
 
-Optional Telegram escalation (Loop 7, only triggers on `priority:critical` issues):
+Optional Telegram escalation (Loop 7 — only triggers on `priority:critical` issues):
 
 ```bash
 gh secret   set ALFRED_TG_TOKEN   -R "$OWNER/$REPO"  # paste bot token
 gh variable set ALFRED_TG_CHAT_ID -R "$OWNER/$REPO"  # numeric chat id
 ```
 
-Missing Telegram credentials is fine — `escalate.yml` skips the Telegram step gracefully and still opens the issue.
+Missing Telegram credentials is fine — `escalate.yml` (when added) skips the Telegram step gracefully.
 
-## 2. Initial-phase policy
-
-Apply labels, repo-settings, and rulesets without the `Claude Code Review / claude-review` required check. Until we have observed the review workflow run green on every PR type, requiring it would block all merges (chicken-and-egg).
+## 2. Apply policy
 
 ```bash
-./scripts/apply-policy.sh --phase=initial
+./scripts/apply-policy.sh
 ```
 
-After this, required status checks on `main` are: `ci / build`, `commitlint / commitlint`. The PR-rule, linear history, bypass-actors, and tag protection are all already enforced.
+This applies labels, repo-settings, and rulesets. Required status checks on `main`: `ci / build`, `commitlint / commitlint`. PR-rule, linear history, bypass-actors, and tag protection are all enforced.
 
-## 3. Verify Claude Code Review
+## 3. Auto-merge for trusted bots
 
-Open a trivial PR (e.g. `docs(readme): typo fix`) from a non-bot branch. Within a few minutes:
+`.github/workflows/auto-merge-trusted.yml` enables `--auto --squash` on every dependabot PR and on release-please PRs. With the rulesets in place, those PRs land on `main` without operator intervention when CI is green.
 
-- `ci / build`, `commitlint / commitlint` post green.
-- `Claude Code Review / claude-review` posts a review and a status check.
+## 4. Appliances (single-purpose deterministic workflows)
 
-Repeat for a dependabot PR. Trigger one manually if you don't want to wait for the next Monday-morning run:
+Three workflows handle repo hygiene without AI:
 
-```bash
-gh api -X POST "/repos/$OWNER/$REPO/dependency-graph/snapshots"
-```
+- `can-opener.yml` — closes superseded dependabot PRs (triggered by dependabot's own "Superseded by #X" comment).
+- `dustpan.yml` — marks inactive PRs/issues stale after 7 days, closes after 14. Exempt by label `keep`/`wip`/`security`/`priority:critical`.
+- `pruner.yml` — deletes branches >30 days old with no open PR and no `keep` label. Sundays 02:00 UTC.
 
-Verify that `Claude Code Review / claude-review` does **not** report `startup_failure` on the dependabot PR. If it does, the Dependabot-scope secret is missing — re-run §1.
+They require no secrets and run on schedule + event triggers. See `docs/design/06-ci-cd-plan.md` §4.5–4.8.
 
-## 4. Final-phase policy
-
-Once §3 verifies that `Claude Code Review / claude-review` posts green on both human and dependabot PRs:
-
-```bash
-./scripts/apply-policy.sh --phase=final
-```
-
-This adds the review check to the required-checks list. From now on, all PRs go through the review grind — no filter, no exceptions.
-
-## 5. Auto-merge for trusted bots
-
-`.github/workflows/auto-merge-trusted.yml` enables `--auto --squash` on every dependabot PR and on release-please PRs. With the rulesets and the review grind in place, those PRs land on `main` without operator intervention when all checks (including review) are green. Breaking changes in major bumps surface as a red `Claude Code Review` check; trustmatrix §2 considers that sufficient protection.
-
-## 6. Smoke test
+## 5. Smoke test
 
 For dependabot:
 
 ```bash
-gh api -X POST "/repos/$OWNER/$REPO/dependency-graph/snapshots"
+# wait for next Monday morning, or just observe an existing dep-PR rebase
 ```
 
-A patch-level bump should appear, the review reviews it, auto-merge takes it.
+A patch-level bump should appear and auto-merge after CI is green.
 
 For release-please: next push to main with a `feat:`/`fix:`/etc. commit updates PR #release-please. When you're ready to cut, the workflow auto-merges it after CI is green.
 
 ## On the CodeQL warnings
 
-CodeQL default setup will flag every unpinned 3rd-party action (`pnpm/action-setup`, `dependabot/fetch-metadata`, `wagoid/commitlint-github-action`, `googleapis/release-please-action`) with "Unpinned tag for a non-immutable Action". These are **warning-severity** — they do not block merge. Either dismiss the alerts manually in **Security → Code scanning** with reason "won't fix — trusted upstream", or revisit advanced setup in a dedicated follow-up PR.
+CodeQL default setup will flag every unpinned 3rd-party action (`pnpm/action-setup`, `dependabot/fetch-metadata`, `wagoid/commitlint-github-action`, `googleapis/release-please-action`, `actions/stale`) with "Unpinned tag for a non-immutable Action". These are **warning-severity** — they do not block merge. Either dismiss the alerts manually in **Security → Code scanning** with reason "won't fix — trusted upstream", or revisit advanced setup in a dedicated follow-up PR.

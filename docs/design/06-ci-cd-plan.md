@@ -290,12 +290,14 @@ Sätts via Repository Rulesets (2026-ersättningen för legacy "branch protectio
 
 | Context | Integration | Rapporterar |
 |---------|-------------|-------------|
-| `ci / build` | GitHub Actions (15368) | Typecheck + build grön |
-| `commitlint / commitlint` | GitHub Actions (15368) | PR-titel följer Conventional Commits |
+| `ci / build (pull_request)` | GitHub Actions (15368) | Typecheck + build grön |
+| `commitlint / commitlint (pull_request)` | GitHub Actions (15368) | PR-titel följer Conventional Commits |
 
 (Tidigare iteration hade `Claude Code Review / claude-review` här. Borttagen efter Loop 4 avaktiverades — se §4.4.)
 
-Context-strängen formatteras alltid `<workflow-name> / <job-name>`. GitHub matchar bytvis — trailing whitespace, fel case, eller fel skiljetecken gör att checken aldrig matchas och PR:n fastnar i "Expected — Waiting for status to be reported".
+`(pull_request)`-suffix är vad GitHub Actions faktiskt postar som status-check-context när workflowen är PR-triggad. Tidigare iteration använde `ci / build` utan suffix — det matchade aldrig vad GitHub postar och fastnade i "Expected — Waiting for status to be reported".
+
+Context-strängen formatteras `<workflow-name> / <job-name> (<event>)` när workflowen kan triggas av flera events, annars `<workflow-name> / <job-name>`. GitHub matchar bytvis — trailing whitespace, fel case, eller saknad event-suffix gör att checken aldrig matchas och PR:n fastnar i "Expected — Waiting for status to be reported". Kontrollera vad GitHub *faktiskt* postar via Actions-fliken på en testkörning innan du sätter required checks.
 
 **PR-rule (i `01-main-branch.json`):**
 

@@ -20,7 +20,7 @@ Om något saknas: rapportera och vänta.
 ```
 0. SSoT
 1. Labels + branch protection
-2. Loop 4 (judge)
+2. Loop 4 (review-grind)
 3. Loop 1+2 (auto-merge-trusted)
 4. Loop 5 (branch-cleanup) + auto-delete on merge
 5. Loop 3 (cron härdning)
@@ -75,7 +75,7 @@ Med:
 
 ## Steg 2 — Labels + branch protection (förberedande)
 
-**Mål:** Definiera labels och branch protection som källfiler i repot innan deras konsumenter (auto-merge, stale, judge) deployas.
+**Mål:** Definiera labels och branch protection (rulesets) som källfiler i repot innan deras konsumenter (auto-merge, stale, review-grind) deployas.
 
 **Filer att skapa:**
 
@@ -85,8 +85,8 @@ Med:
 [
   { "name": "keep", "color": "0E8A16", "description": "Skydda från cleanup-/stale-loopar" },
   { "name": "wip", "color": "FBCA04", "description": "Pågående arbete; skydd mot stale" },
-  { "name": "needs-judge", "color": "5319E7", "description": "Dependabot major; kräver judge-granskning" },
-  { "name": "judge-blocked", "color": "B60205", "description": "Judge avslog 2x; mänsklig granskning krävs" },
+  { "name": "needs-judge", "color": "5319E7", "description": "Dependabot major; flaggad för extra granskning (historisk; kan tas bort om inte använd)" },
+  { "name": "judge-blocked", "color": "B60205", "description": "Reviewer avslog 2x i rad; mänsklig granskning krävs" },
   { "name": "automation-failure", "color": "D93F0B", "description": "Eskalering från en autonom loop" },
   { "name": "cron-degraded", "color": "E99695", "description": "Cron 2 fel i rad" },
   { "name": "cron-paused", "color": "B60205", "description": "Cron pausad efter 3 fel" },
@@ -117,7 +117,7 @@ gh api -X PATCH repos/:owner/:repo \
   --input .github/repo-settings.json
 ```
 
-**OBS — beroende:** Branch protection refererar `judge` som required check. Den finns inte ännu — applicera branch protection *efter* Steg 3 har deployat `judge.yml` (eller applicera nu utan `judge` i required checks och uppdatera efter Steg 3). Jag rekommenderar **applicera utan `judge` nu, uppdatera i Steg 3**.
+**OBS — beroende:** Rulesetet refererar `Claude Code Review / claude-review` som required check. Eftersom `claude-code-review.yml` redan finns i repot är checken tillgänglig — men *verifiera först att den kör grönt på alla PR-typer* (se Steg 3 substeg 3.2) innan du sätter den som required. Annars blockeras dependabot-PR:erna. Två-fas-applicering via `./scripts/apply-policy.sh --phase=initial` (utan claude-code-review-check) → verifiera → `--phase=final` (med).
 
 **Branch:** `chore/repo-config-files`.
 
@@ -129,100 +129,72 @@ gh api -X PATCH repos/:owner/:repo \
 
 ---
 
-## Steg 3 — Judge-agenten (Loop 4)
+## Steg 3 — Aktivera review-grinden (Loop 4)
 
-**Mål:** Realisera den separata granskar-identiteten.
+**Mål:** Säkerställ att `claude-code-review.yml` (befintlig, byggd på `anthropics/claude-code-action@v1`) fungerar som blockerande grind på alla PR-typer, och uppdatera rulesetet att kräva dess status check.
 
-**Filer att skapa:**
+**Förkrav:** `claude-code-review.yml` finns redan i repot. Steg 3 är *konfiguration + verifiering*, inte ny implementation.
 
-`.github/judge-prompt.md` — judge-promptens text. Implementer-agenten producerar första utkast enligt kraven i 07 §4.3. Innehåller:
+**Substeg 3.1 — Sätt dependabot-scope för Anthropic-secret**
 
-- Rollbeskrivning ("Du är granskare i ett solo-underhållet template-repo...")
-- Verdict-trösklarna (approve / request_changes / comment) med konkreta kriterier
-- Strikt JSON-output-spec
-- Exempel på 1–2 PR-typer och deras förväntade verdict
+Den vanligaste startup_failure-orsaken på dependabot-triggade workflows är att secrets från Actions-scope inte är tillgängliga. Fix:
 
-`.github/workflows/judge.yml` — workflow enligt 06 §4.4. Nyckelpunkter:
-
-```yaml
-name: judge
-
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-
-concurrency:
-  group: judge-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
-jobs:
-  judge:
-    if: >
-      github.actor != 'dependabot[bot]' &&
-      github.actor != 'github-actions[bot]' &&
-      !startsWith(github.head_ref, 'release-please--')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      MODEL: claude-sonnet-4-6  # hård pin; bumpas via egen PR
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-
-      - name: Get diff
-        run: |
-          git diff "origin/${{ github.base_ref }}...HEAD" --unified=3 > /tmp/diff.txt
-          wc -c /tmp/diff.txt
-
-      - name: Call judge
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: node .github/scripts/judge.mjs > /tmp/verdict.json
-
-      - name: Post review
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: node .github/scripts/post-review.mjs /tmp/verdict.json
+```bash
+gh secret set ANTHROPIC_API_KEY --app dependabot
+# klistra in samma värde som Actions-scopets ANTHROPIC_API_KEY
 ```
 
-`.github/scripts/judge.mjs` — Node-script som:
-1. Läser `.github/judge-prompt.md`.
-2. Läser `/tmp/diff.txt` + env `PR_TITLE` + `PR_BODY`.
-3. Anropar Anthropic API med `process.env.MODEL`.
-4. Trunkerar diff till ~50 000 tecken om större (varna i prompten att den är trunkerad).
-5. Returnerar strukturerad JSON till stdout.
-6. Vid API-fel: retry 1, sedan exit 0 med JSON `{verdict: "comment", summary: "judge unavailable", concerns: [], suggestions: []}`.
+Verifiera:
 
-`.github/scripts/post-review.mjs` — Node-script som:
-1. Läser verdict-JSON.
-2. Anropar `gh pr review --approve / --request-changes / --comment` med formatterat body.
-3. Vid `request_changes` 2 ggr i rad (kontrollera via `gh pr view --json reviews`): lägg label `judge-blocked`.
+```bash
+gh secret list --app dependabot
+```
 
-**Branch:** `feat/judge-agent`.
+`ANTHROPIC_API_KEY` ska synas i listan.
 
-**PR-titel:** `feat(ci): add judge-agent for separation-of-duties PR review`
+**Substeg 3.2 — Verifiera att claude-code-review.yml kör på alla PR-typer**
+
+Skapa testbranches och verifiera grön körning:
+
+```bash
+clear
+# Test 1: operatörens egen branch
+git checkout -b chore/test-review-trivial
+echo "" >> README.md
+git add README.md && git commit -m "chore: trivial whitespace"
+git push -u origin chore/test-review-trivial
+gh pr create --title "chore: trivial whitespace test" --body "Testar review-loopen"
+
+# Test 2: vänta tills en dependabot-PR finns. Kolla att senaste run blev grön:
+gh run list --workflow=claude-code-review.yml --limit 5
+```
+
+Båda testerna ska sluta med review postad och status check `Claude Code Review / claude-review` grön (eller röd om review-verdict är request_changes — då är det ändå "fungerar").
+
+**Substeg 3.3 — Uppdatera ruleset till final-fas**
+
+När verifiering ovan är grön, uppdatera rulesetet så `Claude Code Review / claude-review` blir required:
+
+```bash
+./scripts/apply-policy.sh --phase=final
+```
+
+Eller via UI: redigera `main-branch-protection`-rulesetet, lägg till `Claude Code Review / claude-review` med integration_id `15368` i required status checks. Spara.
 
 **Verifiering:**
-1. PR:n triggar sig själv → judge granskar sin egen kod (meta — bra första test).
-2. Öppna en testbranch med trivial ändring → judge ska approve.
-3. Öppna en testbranch som lägger till ny dep utan motivering → judge ska request_changes.
 
-**Uppdatera branch protection:** efter merge, lägg till `judge` som required check via `gh api`. Uppdatera även `.github/branch-protection.json` så källfilen reflekterar nuvarande tillstånd.
+```bash
+gh api "/repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/rulesets" \
+  --jq '.[] | select(.name == "main-branch-protection") | .id' \
+  | xargs -I {} gh api "/repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/rulesets/{}" \
+  --jq '.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context'
+```
 
-**Klart när:** Judge-checken syns på nästkommande PR och blockerar merge tills den passat.
+Output ska lista exakt: `ci / build`, `commitlint / commitlint`, `Claude Code Review / claude-review`. Inga trailing spaces.
+
+**Branch:** Inget eget branch-arbete krävs — steget är endast konfiguration via `gh`-kommandon och en eventuell ruleset-fil-uppdatering.
+
+**Klart när:** Nästa PR (oavsett actor) blockeras från merge tills `Claude Code Review / claude-review` är grön. Verifierat manuellt på en testbranch.
 
 ---
 
@@ -264,7 +236,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Label major for judge
+      - name: Label major for awareness
         if: steps.meta.outputs.update-type == 'version-update:semver-major'
         run: gh pr edit "${{ github.event.pull_request.html_url }}" --add-label "needs-judge"
         env:
@@ -281,7 +253,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-**OBS — `pull_request_target` är vald medvetet:** denna trigger ger workflowen tillgång till `GITHUB_TOKEN` även när PR:n är från en fork. Detta är säkert *här* eftersom workflowen inte kör kod från PR:n — den läser bara metadata och anropar `gh pr merge`. Använd aldrig `pull_request_target` i workflows som kör PR-kod (såsom `judge.yml`).
+**OBS — `pull_request_target` är vald medvetet:** denna trigger ger workflowen tillgång till `GITHUB_TOKEN` även när PR:n är från en fork. Detta är säkert *här* eftersom workflowen inte kör kod från PR:n — den läser bara metadata och anropar `gh pr merge`. Använd aldrig `pull_request_target` i workflows som kör PR-kod.
 
 **Branch:** `feat/auto-merge-trusted`.
 
@@ -682,7 +654,7 @@ När alla 8 steg är mergade:
 
 2. **Branch protection enforced:**
    - Försök push direkt till `main` → blockerad.
-   - Öppna trivial PR → judge granskar, ci kör, auto-merge sker.
+   - Öppna trivial PR → review-grinden granskar, ci kör, auto-merge sker.
 
 3. **Cron resilient:**
    - `data/cron-state.json` finns och uppdateras vid varje körning.
@@ -703,22 +675,20 @@ När alla 8 steg är mergade:
 
 ```
 .github/
-├── branch-protection.json           # Ny
+├── rulesets/
+│   ├── 01-main-branch.json           # Ny
+│   └── 02-release-tags.json          # Ny
 ├── repo-settings.json                # Ny
 ├── labels.json                       # Ny
-├── judge-prompt.md                   # Ny
 ├── dependabot.yml                    # Befintlig
 ├── ISSUE_TEMPLATE/                   # Befintlig
 ├── PULL_REQUEST_TEMPLATE.md          # Befintlig
-├── scripts/
-│   ├── judge.mjs                     # Ny
-│   └── post-review.mjs               # Ny
 └── workflows/
     ├── ci.yml                        # Refaktorerad (SSoT)
     ├── commitlint.yml                # Refaktorerad (SSoT)
     ├── publish.yml                   # Refaktorerad (state, retry)
     ├── release-please.yml            # Befintlig
-    ├── judge.yml                     # Ny
+    ├── claude-code-review.yml        # Befintlig — Loop 4 (review-grind)
     ├── auto-merge-trusted.yml        # Ny
     ├── branch-cleanup.yml            # Ny
     ├── cron-watchdog.yml             # Ny
@@ -726,11 +696,15 @@ När alla 8 steg är mergade:
     ├── stale.yml                     # Ny
     └── escalate.yml                  # Ny
 
+scripts/
+├── apply-policy.sh                   # Ny — applicerar rulesets/labels/repo-settings
+└── cron-state.ts                     # Ny
+scripts/cron-state-cli.mjs            # Ny (CLI wrapper)
+
 .nvmrc                                # Ny
 data/cron-state.json                  # Ny
-scripts/cron-state.ts                 # Ny
-scripts/cron-state-cli.mjs            # Ny (CLI wrapper)
 SECURITY.md                           # Ny (Fas 3-rest)
+IMPORT.md                             # Ny — template-konsument-onboarding
 ```
 
 Plus `docs/design/00-07.md` om designen committas till repot (rekommenderat enligt diskussion).
@@ -740,7 +714,7 @@ Plus `docs/design/00-07.md` om designen committas till repot (rekommenderat enli
 ## Kritisk väg
 
 ```
-Steg 1 (SSoT) → Steg 2 (labels+config-filer) → Steg 3 (judge)
+Steg 1 (SSoT) → Steg 2 (labels+config-filer) → Steg 3 (review-grind aktiverad)
    → Steg 4 (auto-merge) → Steg 5 (branch-hygien)
    → Steg 6 (cron-härdning) → Steg 7 (drift+stale) → Steg 8 (escalate)
 ```

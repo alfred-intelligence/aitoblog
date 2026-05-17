@@ -1,97 +1,74 @@
 # Post-merge setup
 
-The operationalisation in `feat/ops-foundation` ships three SSoT configuration files committed to the repo:
+aitoblog ships its repo policy as code under `.github/`:
 
-- `.github/branch-protection.json`
-- `.github/repo-settings.json`
-- `.github/labels.json`
+- `.github/rulesets/01-main-branch.json` — required checks, PR-rule, linear history, bypass actors
+- `.github/rulesets/02-release-tags.json` — protection for v* tags
+- `.github/repo-settings.json` — squash-only merge, auto-merge, auto-delete head branches
+- `.github/labels.json` — labels the loops emit or consume
 
-GitHub does not auto-apply them from disk — they are documentation + machine-readable inputs for one-time `gh` commands. Run the steps below **once** after this PR (and its first follower) lands on `main`. The same steps apply when a user clones this repo via "Use this template".
+GitHub does not auto-apply these from disk. The companion `scripts/apply-policy.sh` reads them and calls the REST API. Run it once after this PR lands, and re-run whenever you clone this repo via "Use this template".
 
-Prerequisites: `gh` CLI installed, authenticated against an account with admin rights on the repo, and `jq` available.
-
-```bash
-OWNER=alfred-intelligence
-REPO=aitoblog
-```
-
-## 1. Labels
-
-Sync the eleven labels the loops emit or consume. Existing labels with matching names are updated; unrelated labels are left alone.
+Prerequisites: `gh` CLI authenticated against an account with admin rights on the repo, plus `jq`.
 
 ```bash
-jq -c '.[]' .github/labels.json | while read -r row; do
-  name=$(jq -r '.name' <<<"$row")
-  color=$(jq -r '.color' <<<"$row")
-  desc=$(jq -r '.description' <<<"$row")
-  if gh label list -R "$OWNER/$REPO" --json name --jq '.[].name' | grep -Fxq "$name"; then
-    gh label edit "$name" -R "$OWNER/$REPO" --color "$color" --description "$desc"
-  else
-    gh label create "$name" -R "$OWNER/$REPO" --color "$color" --description "$desc"
-  fi
-done
+export OWNER=alfred-intelligence
+export REPO=aitoblog
 ```
 
-## 2. Repo settings
+## 1. Provision secrets
 
-Applied via the REST repo-edit endpoint. Fields that the API rejects (e.g. `template_repository`) must be set in the dashboard.
-
-```bash
-gh api -X PATCH "/repos/$OWNER/$REPO" --input .github/repo-settings.json
-```
-
-Then, manually in the dashboard:
-
-- **Settings → Template repository**: checked (only relevant for the public template; downstream clones leave unchecked).
-- **Settings → General → Discussions**: enabled if you want the issue-template `config.yml` discussion link to resolve.
-- **Settings → Rules → Rulesets**: verify the list is empty before applying branch-protection (avoid double-stacked rules).
-
-## 3. Branch protection on `main`
-
-Applied via the branches-protection REST endpoint. Required because the build + commitlint checks need to be enforced for the auto-merge-trusted loop to be meaningful.
-
-Only `build` and `commitlint` are required — not `judge`. Judge skips bot-authored PRs (dependabot, github-actions, release-please) via an `if:` condition in `judge.yml`, so the `judge` check never posts on those PRs. Listing it as required would deadlock every bot-PR. Judge stays as a soft signal: its `request_changes` verdict still calls `exit 1` and shows up as a failing check, and `auto-merge-trusted.yml` will not enable auto-merge on a PR whose judge check is red.
-
-```bash
-gh api -X PUT "/repos/$OWNER/$REPO/branches/main/protection" \
-  --input .github/branch-protection.json
-```
-
-Verify:
-
-```bash
-gh api "/repos/$OWNER/$REPO/branches/main/protection" | jq '.required_status_checks'
-```
-
-Expect `build` and `commitlint` in the `checks` list.
-
-## 4. Secrets and variables
-
-The judge loop reads `ANTHROPIC_API_KEY` from repo secrets. If it is not already set (it is shared with the publish workflow), provision it:
+`ANTHROPIC_API_KEY` is read by the publish loop only. Set on the Actions scope:
 
 ```bash
 gh secret set ANTHROPIC_API_KEY -R "$OWNER/$REPO"
-# (paste key when prompted)
 ```
 
-No other secrets are introduced by this PR.
+No Dependabot-scope secret is needed anymore — there is no AI in the PR-review path (see docs/design/06-ci-cd-plan.md §4.4 on why Loop 4 was removed).
+
+Optional Telegram escalation (Loop 7 — only triggers on `priority:critical` issues):
+
+```bash
+gh secret   set ALFRED_TG_TOKEN   -R "$OWNER/$REPO"  # paste bot token
+gh variable set ALFRED_TG_CHAT_ID -R "$OWNER/$REPO"  # numeric chat id
+```
+
+Missing Telegram credentials is fine — `escalate.yml` (when added) skips the Telegram step gracefully.
+
+## 2. Apply policy
+
+```bash
+./scripts/apply-policy.sh
+```
+
+This applies labels, repo-settings, and rulesets. Required status checks on `main`: `ci / build`, `commitlint / commitlint`. PR-rule, linear history, bypass-actors, and tag protection are all enforced.
+
+## 3. Auto-merge for trusted bots
+
+`.github/workflows/auto-merge-trusted.yml` enables `--auto --squash` on every dependabot PR and on release-please PRs. With the rulesets in place, those PRs land on `main` without operator intervention when CI is green.
+
+## 4. Appliances (single-purpose deterministic workflows)
+
+Three workflows handle repo hygiene without AI:
+
+- `can-opener.yml` — closes superseded dependabot PRs (triggered by dependabot's own "Superseded by #X" comment).
+- `dustpan.yml` — marks inactive PRs/issues stale after 7 days, closes after 14. Exempt by label `keep`/`wip`/`security`/`priority:critical`.
+- `pruner.yml` — deletes branches >30 days old with no open PR and no `keep` label. Sundays 02:00 UTC.
+
+They require no secrets and run on schedule + event triggers. See `docs/design/06-ci-cd-plan.md` §4.5–4.8.
 
 ## 5. Smoke test
 
-Open a trivial PR (e.g. `docs(readme): typo fix`) from a non-bot branch. Within a few minutes:
-
-- `build`, `commitlint`, and `judge` checks all post.
-- `judge` posts a review (approve/comment/request_changes).
-- If verdict is `approve` or `comment` and the other checks are green, merge is unblocked.
-
-For dependabot smoke test: wait for the next Monday-morning dependabot run, or trigger one manually:
+For dependabot:
 
 ```bash
-gh api -X POST "/repos/$OWNER/$REPO/dependency-graph/snapshots"
+# wait for next Monday morning, or just observe an existing dep-PR rebase
 ```
 
-A patch-level bump should appear, the auto-merge-trusted workflow should enable auto-merge, and after CI it should land on `main` without operator intervention.
+A patch-level bump should appear and auto-merge after CI is green.
 
-## Note on CodeQL warnings
+For release-please: next push to main with a `feat:`/`fix:`/etc. commit updates PR #release-please. When you're ready to cut, the workflow auto-merges it after CI is green.
 
-CodeQL default setup will flag every unpinned 3rd-party action (`pnpm/action-setup`, `dependabot/fetch-metadata`, etc.) with "Unpinned tag for a non-immutable Action". These are **warning-severity** — they do not block merge. An attempt to suppress them via advanced setup was reverted from this PR because both Analyze jobs failed on the committed config. Either dismiss the alerts manually in **Security → Code scanning** with reason "won't fix — trusted upstream", or revisit advanced setup in a dedicated follow-up PR.
+## On the CodeQL warnings
+
+CodeQL default setup will flag every unpinned 3rd-party action (`pnpm/action-setup`, `dependabot/fetch-metadata`, `wagoid/commitlint-github-action`, `googleapis/release-please-action`, `actions/stale`) with "Unpinned tag for a non-immutable Action". These are **warning-severity** — they do not block merge. Either dismiss the alerts manually in **Security → Code scanning** with reason "won't fix — trusted upstream", or revisit advanced setup in a dedicated follow-up PR.

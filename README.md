@@ -4,35 +4,35 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-F38020?logo=cloudflare&logoColor=white)](https://dash.cloudflare.com/?to=/:account/pages/new/provider/github)
 
-Helautomatisk teknisk blogg där en AI skriver inlägg om GitHub-repos och
-artiklar i en kurerad lista. Markdown-filer i Git är källan, push till `main`
-triggar Cloudflare Pages-build, RSS uppdateras automatiskt. Ingen mänsklig
-granskning innan publicering — det är medvetet, designen accepterar det som
-priset för full automation.
+A fully automated technical blog where an AI writes posts about GitHub repos and
+articles from a curated list. Markdown files in Git are the source of truth, a push
+to `main` triggers a Cloudflare Pages build, and RSS is updated automatically. No
+human review before publishing — this is intentional; the design accepts it as the
+price of full automation.
 
-## Använd som template
+## Use as a template
 
-Klicka på **"Use this template"** högst upp på GitHub-sidan (eller klona
-manuellt) för att skapa ditt eget repo. Sätt sedan upp Cloudflare Pages och
-secrets enligt [Setup efter merge](#setup-efter-merge) nedan.
+Click **"Use this template"** at the top of the GitHub page (or clone manually)
+to create your own repo. Then set up Cloudflare Pages and secrets as described in
+[Setup after merge](#setup-after-merge) below.
 
-Mall-uppdateringar dras inte automatiskt — när det här repot uppdateras kan du
-cherry-picka ändringar du vill ha in i din klon.
+Template updates are not pulled automatically — when this repo is updated you can
+cherry-pick the changes you want into your clone.
 
-## Hur det fungerar
+## How it works
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│           GitHub Actions (cron mån/ons/fre 08:00 UTC)      │
+│           GitHub Actions (cron Mon/Wed/Fri 08:00 UTC)      │
 │           scripts/generate-post.ts                          │
 └──────┬─────────────────────────┬──────────────────┬─────────┘
        │                         │                  │
        ▼                         ▼                  ▼
 ┌──────────────┐         ┌───────────────┐   ┌────────────┐
 │ SOURCES_URL  │         │ GitHub API /  │   │ posted.json│
-│ → JSON-array │         │ HTML+         │   │ (cooldown) │
-│ av repos +   │         │ Readability   │   │            │
-│ artikel-URLs │         │               │   │            │
+│ → JSON array │         │ HTML+         │   │ (cooldown) │
+│ of repos +   │         │ Readability   │   │            │
+│ article URLs │         │               │   │            │
 └──────┬───────┘         └───────┬───────┘   └─────┬──────┘
        │                         │                  │
        └──────────┬──────────────┘                 │
@@ -56,83 +56,84 @@ cherry-picka ändringar du vill ha in i din klon.
        └─────────────────────────┘
 ```
 
-## Källor (`SOURCES_URL` / `data/sources.json`)
+## Sources (`SOURCES_URL` / `data/sources.json`)
 
-Pipen läser en JSON-array av strängar. Varje sträng är antingen:
+The pipeline reads a JSON array of strings. Each string is either:
 
-- **`"owner/repo"`** eller **`https://github.com/owner/repo`** — skriptet
-  använder GitHub API och hämtar README, senaste release och senaste 5 commits.
-- **valfri webb-URL** — skriptet hämtar HTML och extraherar huvudinnehållet med
-  [Readability](https://github.com/mozilla/readability) (samma teknik som
+- **`"owner/repo"`** or **`https://github.com/owner/repo`** — the script uses
+  the GitHub API and fetches the README, latest release, and the 5 most recent commits.
+- **any web URL** — the script fetches the HTML and extracts the main content using
+  [Readability](https://github.com/mozilla/readability) (the same technique used by
   Firefox Reader View).
 
-Default-listan i `data/sources.json` blandar båda typerna så pipen demonstrerar
-båda kodvägarna utan extra setup. Byt ut den till din egen URL via repo-variabeln
+The default list in `data/sources.json` mixes both types so the pipeline demonstrates
+both code paths without extra setup. Replace it with your own URL via the repo variable
 `SOURCES_URL`.
 
-Cooldown är **60 dagar** — en källa skrivs inte om innan dess. Nyckel = `sourceUrl`
-i `data/posted.json`. Om alla källor är i cooldown faller pipen tillbaka på
-least-recently-posted.
+Cooldown is **60 days** — a source will not be rewritten before then. The key is
+`sourceUrl` in `data/posted.json`. If all sources are in cooldown the pipeline falls
+back to the least-recently-posted source.
 
-## Setup efter merge
+## Setup after merge
 
-### 1. Lägg in GitHub Secret + Variable
+### 1. Add a GitHub Secret + Variable
 
-I `Settings → Secrets and variables → Actions`:
+In `Settings → Secrets and variables → Actions`:
 
-- **Secrets** → New: `ANTHROPIC_API_KEY` ([Anthropic-konsolen](https://console.anthropic.com/) →
+- **Secrets** → New: `ANTHROPIC_API_KEY` ([Anthropic console](https://console.anthropic.com/) →
   Settings → API Keys).
-- **Variables** → New (valfri): `SOURCES_URL`. Pekar på en publik URL som returnerar en
-  JSON-array enligt formatet ovan. Lämnas tom → skriptet läser `data/sources.json`
-  i repot.
+- **Variables** → New (optional): `SOURCES_URL`. Points to a public URL that returns a
+  JSON array in the format described above. Leave empty → the script reads
+  `data/sources.json` from the repo.
 
-Doc: <https://docs.github.com/en/actions/security-guides/encrypted-secrets>
+Docs: <https://docs.github.com/en/actions/security-guides/encrypted-secrets>
 
-### 2. Aktivera write-permission för workflows
+### 2. Enable write permissions for workflows
 
-`Settings → Actions → General → Workflow permissions` → välj
-**Read and write permissions**. Annars kan workflowen inte committa nya inlägg.
+`Settings → Actions → General → Workflow permissions` → select
+**Read and write permissions**. Otherwise the workflow cannot commit new posts.
 
-### 3. Koppla Cloudflare Pages
+### 3. Connect Cloudflare Pages
 
-I Cloudflare-dashen: `Workers & Pages → Create → Pages → Connect to Git` → välj
-detta repo. Build-inställningar:
+In the Cloudflare dashboard: `Workers & Pages → Create → Pages → Connect to Git` →
+select this repo. Build settings:
 
-| Inställning | Värde |
-|-------------|-------|
+| Setting | Value |
+|---------|-------|
 | Framework preset | Astro |
 | Build command | `pnpm build` |
 | Build output directory | `dist` |
 | Environment variable | `NODE_VERSION=20` |
 
-Doc: <https://developers.cloudflare.com/pages/framework-guides/deploy-an-astro-site/>
+Docs: <https://developers.cloudflare.com/pages/framework-guides/deploy-an-astro-site/>
 
-När bygget är klart syns sajten på `https://<projektnamn>.pages.dev`. Uppdatera
-`site:` i `astro.config.mjs` om du använder annan domän.
+Once the build is complete the site will be available at
+`https://<project-name>.pages.dev`. Update `site:` in `astro.config.mjs` if you are
+using a different domain.
 
-### 4. Verifiera kedjan
+### 4. Verify the pipeline
 
 ```bash
-# Kör utan att committa — markdown loggas
+# Run without committing — markdown is logged to stdout
 gh workflow run publish.yml -f dry_run=true
 
-# Kör skarpt — committar inlägg, Cloudflare bygger om
+# Run for real — commits posts, Cloudflare rebuilds
 gh workflow run publish.yml
 ```
 
-Cron-schemat (`'0 8 * * 1,3,5'`) aktiveras automatiskt så snart workflowen finns
-på `main`.
+The cron schedule (`'0 8 * * 1,3,5'`) activates automatically as soon as the workflow
+exists on `main`.
 
-## Lokal utveckling
+## Local development
 
 ```bash
 pnpm install
 pnpm dev                 # http://localhost:4321
-pnpm build               # bygg statisk site till dist/
+pnpm build               # build static site to dist/
 pnpm astro check         # typecheck
 ```
 
-Generera ett inlägg lokalt (kräver `ANTHROPIC_API_KEY` i `.env`):
+Generate a post locally (requires `ANTHROPIC_API_KEY` in `.env`):
 
 ```bash
 echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
@@ -141,83 +142,82 @@ pnpm tsx scripts/generate-post.ts --source=cloudflare/workers-sdk --dry-run
 pnpm tsx scripts/generate-post.ts --sources-url=https://example.com/my-list.json --dry-run
 ```
 
-Flaggor:
-- `--dry-run` — skriver markdown till stdout, ingen fil skrivs
-- `--source=<url-or-owner/repo>` — tvinga en specifik källa (måste finnas i sources)
-- `--sources-url=<url>` — override `SOURCES_URL` env
+Flags:
+- `--dry-run` — writes markdown to stdout, no file is written
+- `--source=<url-or-owner/repo>` — force a specific source (must exist in sources)
+- `--sources-url=<url>` — override the `SOURCES_URL` env variable
 
-## Pausa eller återuppta
+## Pause or resume
 
-- **Pausa schemat**: `Actions` → `publish` → `...` → `Disable workflow`.
-- **Tillfälligt mute** utan att stänga: kommentera ut `cron`-raden i
-  `.github/workflows/publish.yml` och pusha — `workflow_dispatch` finns kvar.
+- **Pause the schedule**: `Actions` → `publish` → `...` → `Disable workflow`.
+- **Temporary mute** without disabling: comment out the `cron` line in
+  `.github/workflows/publish.yml` and push — `workflow_dispatch` remains available.
 
-## Hur du justerar AI:n
+## How to tune the AI
 
-- **Promptändringar**: redigera `SYSTEM_PROMPT` i `scripts/claude.ts`.
-- **Annan modell**: byt `MODEL`-konstanten i `scripts/claude.ts` (t.ex.
-  `claude-haiku-4-5` om du vill prova billigare).
-- **Annan effort/thinking**: ändra `effort`/`thinking`-fälten i samma fil.
-- **Längre/kortare inlägg**: justera ord-intervallen i systemprompten.
+- **Prompt changes**: edit `SYSTEM_PROMPT` in `scripts/claude.ts`.
+- **Different model**: change the `MODEL` constant in `scripts/claude.ts` (e.g.
+  `claude-haiku-4-5` if you want to try a cheaper option).
+- **Different effort/thinking**: change the `effort`/`thinking` fields in the same file.
+- **Longer/shorter posts**: adjust the word-count intervals in the system prompt.
 
-## Designval (kort)
+## Design decisions (brief)
 
-| Val | Motivering |
-|-----|-----------|
-| Astro 5 | Native content collections + RSS via `@astrojs/rss`, native pnpm-stöd på Cloudflare Pages |
-| Cloudflare Pages | Generös free tier, native git-deploy, ingen cold start |
-| GitHub Actions cron | Kör i samma kontext som repot, kan committa direkt med `GITHUB_TOKEN` |
-| Markdown i Git som SoT | GitOps — allt versionshanterat, granskbart, portabelt |
-| JSON för cooldown-state | En fil i repot räcker — sekventiella körningar, `concurrency: publish` skyddar mot races |
-| AI väljer själv format | Naturlig variation utan extra logik |
-| Cooldown 60 dagar | Med 12 inlägg/månad krävs ~24 unika källor i poolen |
-| Sonnet 4.6 | Bra kvalitet för teknisk skrivning till låg kostnad. Strukturerad output via Zod-schema gör validering trivial |
-| Hybridkälla (repo + artikel) | Ger AI:n tillgång till READMEs/releases för repos OCH artikeltext från resten av webben — samma promptmall, olika kontextpaket |
+| Decision | Rationale |
+|----------|-----------|
+| Astro 5 | Native content collections + RSS via `@astrojs/rss`, native pnpm support on Cloudflare Pages |
+| Cloudflare Pages | Generous free tier, native git-deploy, no cold starts |
+| GitHub Actions cron | Runs in the same context as the repo, can commit directly with `GITHUB_TOKEN` |
+| Markdown in Git as SoT | GitOps — everything versioned, reviewable, and portable |
+| JSON for cooldown state | One file in the repo is enough — sequential runs, `concurrency: publish` protects against races |
+| AI chooses its own format | Natural variation without extra logic |
+| 60-day cooldown | With 12 posts/month you need ~24 unique sources in the pool |
+| Sonnet 4.6 | Good quality for technical writing at low cost. Structured output via Zod schema makes validation trivial |
+| Hybrid source (repo + article) | Gives the AI access to READMEs/releases for repos AND article text from the rest of the web — same prompt template, different context packages |
 
-## Begränsningar
+## Limitations
 
-- AI kan ha fel — varje inlägg är märkt med disclaimer både i sidfot och
-  per-inlägg. Verifiera mot källan innan du citerar.
-- Readability-extraktion fungerar dåligt på SPAs som renderas med JS. Sådana
-  artikel-URL:er kan ge tunna inlägg eller falla — pipen rapporterar tydligt
-  och cron försöker igen vid nästa fönster.
-- Token-kostnaden för långa artiklar trunkeras till ~12 KB innan de skickas
-  till Claude.
+- The AI can be wrong — every post is marked with a disclaimer both in the footer and
+  per post. Verify against the source before citing.
+- Readability extraction works poorly on SPAs rendered with JS. Such article URLs may
+  produce thin posts or fail entirely — the pipeline reports this clearly and the cron
+  will retry at the next window.
+- Token cost for long articles is truncated to ~12 KB before being sent to Claude.
 
-## Bidra
+## Contributing
 
-Använd [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`,
-`fix:`, `chore:`, `docs:`, etc. Detta driver release-please-pipen som sköter
-versioner och CHANGELOG.md automatiskt.
+Use [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`,
+`chore:`, `docs:`, etc. This drives the release-please pipeline which handles versions
+and `CHANGELOG.md` automatically.
 
-En commitlint-grind (GitHub Action) blockerar PRs där commit-meddelanden inte
-följer konventionen. En lokal Husky-hook ger samma feedback innan push —
-aktiveras automatiskt vid `pnpm install`.
+A commitlint check (GitHub Action) blocks PRs where commit messages do not follow the
+convention. A local Husky hook provides the same feedback before pushing — activated
+automatically on `pnpm install`.
 
-Se [CONTRIBUTING.md](./CONTRIBUTING.md) för fullständig guide.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full guide.
 
-## Licens
+## License
 
 [MIT](./LICENSE) © Alfred Intelligence
 
-## Filstruktur
+## File structure
 
 ```
 .
 ├── .github/
 │   ├── ISSUE_TEMPLATE/          # bug + feature templates
 │   ├── workflows/
-│   │   ├── ci.yml               # typecheck + build på PRs
-│   │   ├── commitlint.yml       # blockerar non-conventional commits
+│   │   ├── ci.yml               # typecheck + build on PRs
+│   │   ├── commitlint.yml       # blocks non-conventional commits
 │   │   ├── publish.yml          # cron → AI → commit
 │   │   └── release-please.yml   # auto-changelog + tags
 │   ├── dependabot.yml
 │   └── pull_request_template.md
-├── .husky/commit-msg            # lokal commit-format-validering
+├── .husky/commit-msg            # local commit-format validation
 ├── astro.config.mjs
 ├── data/
-│   ├── posted.json              # cooldown-state
-│   └── sources.json             # default källista (placeholder)
+│   ├── posted.json              # cooldown state
+│   └── sources.json             # default source list (placeholder)
 ├── package.json
 ├── public/favicon.svg
 ├── scripts/
@@ -225,10 +225,10 @@ Se [CONTRIBUTING.md](./CONTRIBUTING.md) för fullständig guide.
 │   ├── fetch-article.ts         # HTML + Readability
 │   ├── fetch-repo.ts            # GitHub API
 │   ├── generate-post.ts         # entry point
-│   ├── post-writer.ts           # skriv markdown + uppdatera posted.json
-│   ├── schema.ts                # Zod-scheman + Source-typer
+│   ├── post-writer.ts           # write markdown + update posted.json
+│   ├── schema.ts                # Zod schemas + Source types
 │   ├── source.ts                # parse SOURCES_URL → Source[]
-│   └── topic-selector.ts        # cooldown-logik
+│   └── topic-selector.ts        # cooldown logic
 ├── src/
 │   ├── content.config.ts
 │   ├── content/blog/*.md

@@ -39,7 +39,7 @@
     "prepare": "husky || true"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.0",
+    "@anthropic-ai/sdk": "^0.96.0",
     "@astrojs/rss": "^4.0.0",
     "@mozilla/readability": "^0.6.0",
     "astro": "^6.3.1",

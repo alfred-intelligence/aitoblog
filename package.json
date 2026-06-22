@@ -59,5 +59,11 @@
     "tsx": "^4.23.0",
     "typescript": "^5.6.0"
   },
-  "packageManager": "pnpm@10.0.0"
+  "packageManager": "pnpm@10.0.0",
+  "pnpm": {
+    "overrides": {
+      "undici@>=7.0.0 <7.28.0": ">=7.28.0 <8.0.0",
+      "esbuild@<0.28.1": ">=0.28.1"
+    }
+  }
 }

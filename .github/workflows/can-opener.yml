@@ -1,0 +1,34 @@
+name: can-opener
+
+# Closes superseded dependabot PRs.
+#
+# When dependabot recreates a PR (after a rebase failure caused by
+# non-dependabot edits), it comments "Superseded by #X" on the old one
+# and leaves it open. This workflow listens for that comment and closes
+# the old PR. One job, one if-condition, one gh command.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  close-superseded:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'dependabot[bot]' &&
+      contains(github.event.comment.body, 'Superseded by')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Close superseded PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "Closing superseded PR #$PR_NUMBER"
+          gh pr close "$PR_NUMBER" --repo "$REPO" \
+            --comment "Auto-closed by can-opener: dependabot says superseded."

@@ -1,7 +1,7 @@
 {
   "name": "aitoblog",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Helautomatisk AI-driven teknisk blogg. Astro + Cloudflare Pages + Anthropic Claude. GitHub Actions cron skriver inläggen åt dig.",
   "engines": {

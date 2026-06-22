@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { SourcesSchema, type Source } from './schema.js';
 
 const REPO_SHORTHAND_RE = /^[\w.-]+\/[\w.-]+$/;
+const ALLOWED_SOURCES_HOSTS = new Set(['raw.githubusercontent.com', 'gist.githubusercontent.com']);
 
 function parseSourceString(raw: string): Source | null {
   const trimmed = raw.trim();
@@ -58,17 +59,41 @@ async function readLocalSources(): Promise<unknown> {
   return JSON.parse(raw);
 }
 
+function validateRemoteSourcesUrl(value: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`Invalid SOURCES_URL: ${value}`);
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`SOURCES_URL must use https: ${value}`);
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new Error(`SOURCES_URL must not include credentials: ${value}`);
+  }
+
+  if (!ALLOWED_SOURCES_HOSTS.has(parsed.hostname)) {
+    throw new Error(`SOURCES_URL host is not allowed: ${parsed.hostname}`);
+  }
+
+  return parsed.toString();
+}
+
 export async function fetchSources(sourcesUrl?: string): Promise<Source[]> {
   let raw: unknown;
 
   if (!sourcesUrl || sourcesUrl.startsWith('file://') || sourcesUrl === 'local') {
     raw = await readLocalSources();
   } else {
-    const res = await fetch(sourcesUrl, {
+    const validatedSourcesUrl = validateRemoteSourcesUrl(sourcesUrl);
+    const res = await fetch(validatedSourcesUrl, {
       headers: { 'User-Agent': 'aitoblog-source-fetcher/1.0' },
     });
     if (!res.ok) {
-      throw new Error(`Failed to fetch SOURCES_URL ${sourcesUrl}: ${res.status} ${res.statusText}`);
+      throw new Error(`Failed to fetch SOURCES_URL ${validatedSourcesUrl}: ${res.status} ${res.statusText}`);
     }
     raw = await res.json();
   }

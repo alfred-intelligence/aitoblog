@@ -19,7 +19,7 @@ importers:
         version: 0.6.0
       astro:
         specifier: ^6.4.6
-        version: 6.4.6(@types/node@22.19.18)(jiti@2.6.1)(rollup@4.62.2)(tsx@4.21.0)(yaml@2.8.4)
+        version: 6.4.6(@types/node@26.0.1)(jiti@2.6.1)(rollup@4.62.2)(tsx@4.21.0)(yaml@2.8.4)
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -41,7 +41,7 @@ importers:
         version: 0.9.9(prettier@3.8.3)(typescript@5.9.3)
       '@commitlint/cli':
         specifier: ^19.5.0
-        version: 19.8.1(@types/node@22.19.18)(typescript@5.9.3)
+        version: 19.8.1(@types/node@26.0.1)(typescript@5.9.3)
       '@commitlint/config-conventional':
         specifier: ^21.0.0
         version: 21.0.0
@@ -49,8 +49,8 @@ importers:
         specifier: ^28.0.3
         version: 28.0.3
       '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.18
+        specifier: ^26.0.1
+        version: 26.0.1
       husky:
         specifier: ^9.1.0
         version: 9.1.7
@@ -926,8 +926,8 @@ packages:
   '@types/nlcst@2.0.3':
     resolution: {integrity: sha512-vSYNSDe6Ix3q+6Z7ri9lyWqgGhJTmzRjZRqyq15N0Z/1/UnVsno9G/N40NBijoYx2seFDIl0+B2mgAb9mezUCA==}
 
-  '@types/node@22.19.18':
-    resolution: {integrity: sha512-9v00a+dn2yWVsYDEunWC4g/TcRKVq3r8N5FuZp7u0SGrPvdN9c2yXI9bBuf5Fl0hNCb+QTIePTn5pJs2pwBOQQ==}
+  '@types/node@26.0.1':
+    resolution: {integrity: sha512-fc3KiUoBt6kie0N9bIW3E47vZsuaMf0PM2AaUpLCLT0s/LvX1nxAim6Fc049cNxODPpGm6qRAuUOB86SkRuPQw==}
 
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
@@ -1358,7 +1358,7 @@ packages:
   git-raw-commits@4.0.0:
     resolution: {integrity: sha512-ICsMM1Wk8xSGMowkOmPrzo2Fgmfo4bMHLNX6ytHjajRJUqvHOw/TFapQ+QG75c3X/tTDDhOSRPGC52dDbNM8FQ==}
     engines: {node: '>=16'}
-    deprecated: This package is no longer maintained. For the JavaScript API, please use @conventional-changelog/git-client instead.
+    deprecated: Deprecated and no longer maintained. Use @conventional-changelog/git-client instead.
     hasBin: true
 
   github-slugger@2.0.0:
@@ -2115,11 +2115,11 @@ packages:
   uncrypto@0.1.3:
     resolution: {integrity: sha512-Ql87qFHB3s/De2ClA9e0gsnS6zXG27SkTiSJwjCc9MebbfapQfuPzumMIUMi38ezPZVNFcHI9sUIepeQfw8J8Q==}
 
-  undici-types@6.21.0:
-    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
-
   undici-types@7.25.0:
     resolution: {integrity: sha512-AXNgS1Byr27fTI+2bsPEkV9CxkT8H6xNyRI68b3TatlZo3RkzlqQBLL+w7SmGPVpokjHbcuNVQUWE7FRTg+LRA==}
+
+  undici-types@8.3.0:
+    resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
   undici@7.25.0:
     resolution: {integrity: sha512-xXnp4kTyor2Zq+J1FfPI6Eq3ew5h6Vl0F/8d9XU5zZQf1tX9s2Su1/3PiMmUANFULpmksxkClamIZcaUqryHsQ==}
@@ -2628,11 +2628,11 @@ snapshots:
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5
 
-  '@commitlint/cli@19.8.1(@types/node@22.19.18)(typescript@5.9.3)':
+  '@commitlint/cli@19.8.1(@types/node@26.0.1)(typescript@5.9.3)':
     dependencies:
       '@commitlint/format': 19.8.1
       '@commitlint/lint': 19.8.1
-      '@commitlint/load': 19.8.1(@types/node@22.19.18)(typescript@5.9.3)
+      '@commitlint/load': 19.8.1(@types/node@26.0.1)(typescript@5.9.3)
       '@commitlint/read': 19.8.1
       '@commitlint/types': 19.8.1
       tinyexec: 1.1.2
@@ -2679,7 +2679,7 @@ snapshots:
       '@commitlint/rules': 19.8.1
       '@commitlint/types': 19.8.1
 
-  '@commitlint/load@19.8.1(@types/node@22.19.18)(typescript@5.9.3)':
+  '@commitlint/load@19.8.1(@types/node@26.0.1)(typescript@5.9.3)':
     dependencies:
       '@commitlint/config-validator': 19.8.1
       '@commitlint/execute-rule': 19.8.1
@@ -2687,7 +2687,7 @@ snapshots:
       '@commitlint/types': 19.8.1
       chalk: 5.6.2
       cosmiconfig: 9.0.1(typescript@5.9.3)
-      cosmiconfig-typescript-loader: 6.3.0(@types/node@22.19.18)(cosmiconfig@9.0.1(typescript@5.9.3))(typescript@5.9.3)
+      cosmiconfig-typescript-loader: 6.3.0(@types/node@26.0.1)(cosmiconfig@9.0.1(typescript@5.9.3))(typescript@5.9.3)
       lodash.isplainobject: 4.0.6
       lodash.merge: 4.6.2
       lodash.uniq: 4.5.0
@@ -3258,7 +3258,7 @@ snapshots:
 
   '@types/conventional-commits-parser@5.0.2':
     dependencies:
-      '@types/node': 22.19.18
+      '@types/node': 26.0.1
 
   '@types/debug@4.1.13':
     dependencies:
@@ -3272,7 +3272,7 @@ snapshots:
 
   '@types/jsdom@28.0.3':
     dependencies:
-      '@types/node': 22.19.18
+      '@types/node': 26.0.1
       '@types/tough-cookie': 4.0.5
       parse5: 8.0.1
       undici-types: 7.25.0
@@ -3287,9 +3287,9 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
 
-  '@types/node@22.19.18':
+  '@types/node@26.0.1':
     dependencies:
-      undici-types: 6.21.0
+      undici-types: 8.3.0
 
   '@types/tough-cookie@4.0.5': {}
 
@@ -3386,7 +3386,7 @@ snapshots:
 
   array-iterate@2.0.1: {}
 
-  astro@6.4.6(@types/node@22.19.18)(jiti@2.6.1)(rollup@4.62.2)(tsx@4.21.0)(yaml@2.8.4):
+  astro@6.4.6(@types/node@26.0.1)(jiti@2.6.1)(rollup@4.62.2)(tsx@4.21.0)(yaml@2.8.4):
     dependencies:
       '@astrojs/compiler': 4.0.0
       '@astrojs/internal-helpers': 0.10.0
@@ -3438,8 +3438,8 @@ snapshots:
       unist-util-visit: 5.1.0
       unstorage: 1.17.5
       vfile: 6.0.3
-      vite: 7.3.5(@types/node@22.19.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4)
-      vitefu: 1.1.3(vite@7.3.5(@types/node@22.19.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4))
+      vite: 7.3.5(@types/node@26.0.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4)
+      vitefu: 1.1.3(vite@7.3.5(@types/node@26.0.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4))
       xxhash-wasm: 1.1.0
       yargs-parser: 22.0.0
       zod: 4.4.3
@@ -3564,9 +3564,9 @@ snapshots:
 
   cookie@1.1.1: {}
 
-  cosmiconfig-typescript-loader@6.3.0(@types/node@22.19.18)(cosmiconfig@9.0.1(typescript@5.9.3))(typescript@5.9.3):
+  cosmiconfig-typescript-loader@6.3.0(@types/node@26.0.1)(cosmiconfig@9.0.1(typescript@5.9.3))(typescript@5.9.3):
     dependencies:
-      '@types/node': 22.19.18
+      '@types/node': 26.0.1
       cosmiconfig: 9.0.1(typescript@5.9.3)
       jiti: 2.6.1
       typescript: 5.9.3
@@ -4843,9 +4843,9 @@ snapshots:
 
   uncrypto@0.1.3: {}
 
-  undici-types@6.21.0: {}
-
   undici-types@7.25.0: {}
+
+  undici-types@8.3.0: {}
 
   undici@7.25.0: {}
 
@@ -4939,7 +4939,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite@7.3.5(@types/node@22.19.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4):
+  vite@7.3.5(@types/node@26.0.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4):
     dependencies:
       esbuild: 0.27.7
       fdir: 6.5.0(picomatch@4.0.4)
@@ -4948,15 +4948,15 @@ snapshots:
       rollup: 4.62.2
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 22.19.18
+      '@types/node': 26.0.1
       fsevents: 2.3.3
       jiti: 2.6.1
       tsx: 4.21.0
       yaml: 2.8.4
 
-  vitefu@1.1.3(vite@7.3.5(@types/node@22.19.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4)):
+  vitefu@1.1.3(vite@7.3.5(@types/node@26.0.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4)):
     optionalDependencies:
-      vite: 7.3.5(@types/node@22.19.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4)
+      vite: 7.3.5(@types/node@26.0.1)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.4)
 
   volar-service-css@0.0.70(@volar/language-service@2.4.28):
     dependencies:

@@ -17,6 +17,7 @@ concurrency:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   generate:
@@ -25,16 +26,31 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Gate (06-ci-cd-plan §4.3): pausad cron kör inte. Operatören
+      # återställer data/cron-state.json manuellt för att återuppta.
+      - name: Check pause state
+        id: state
+        run: |
+          paused=$(jq -r '.paused' data/cron-state.json)
+          if [ "$paused" = "true" ]; then
+            echo "⏸️ Cron är pausad. Återställ data/cron-state.json för att återuppta." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "paused=$paused" >> "$GITHUB_OUTPUT"
+
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        if: steps.state.outputs.paused != 'true'
 
       - uses: actions/setup-node@v6
+        if: steps.state.outputs.paused != 'true'
         with:
           node-version-file: .nvmrc
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+        if: steps.state.outputs.paused != 'true'
 
       - name: Generate post
+        if: steps.state.outputs.paused != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,16 +62,48 @@ jobs:
             pnpm tsx scripts/generate-post.ts
           fi
 
+      # Failure räknas HÄR (inte i scriptet) så att även install-/miljöfel
+      # fångas och inget dubbelräknas. Vid 3 fel i rad pausar staten sig
+      # själv och ett kritiskt issue öppnas.
+      - name: Mark failure and maybe pause
+        if: failure() && steps.state.outputs.paused != 'true' && inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm tsx scripts/cron-state.ts mark-failure || {
+            # tsx otillgänglig (t.ex. install-fel) — räkna med jq som fallback.
+            jq '.consecutive_failures += 1 | .paused = (.consecutive_failures >= 3)' \
+              data/cron-state.json > /tmp/cron-state.json
+            mv /tmp/cron-state.json data/cron-state.json
+          }
+          failures=$(jq -r '.consecutive_failures' data/cron-state.json)
+          echo "❌ Fel nr $failures i rad." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$failures" -ge 3 ]; then
+            body=$(printf 'Cron har pausat sig själv (`data/cron-state.json` → `paused: true`). Återställ filen för att återuppta driften.\n\nSenaste run: %s' \
+              "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+            gh issue create \
+              --title "🚨 cron-publish pausad efter 3 fel i rad" \
+              --body "$body" \
+              --label "cron-paused,priority:critical,automation-failure"
+          fi
+
+      # Committar inlägg + posted.json + cron-state.json — även vid fel så
+      # att failure-räknaren persisteras (state-filen är repo-committad
+      # observability, 06 §7b).
       - name: Commit and push
-        if: ${{ inputs.dry_run != 'true' }}
+        if: always() && steps.state.outputs.paused != 'true' && inputs.dry_run != 'true'
         run: |
           git config user.name "aitoblog-bot"
           git config user.email "aitoblog-bot@users.noreply.github.com"
-          git add src/content/blog/ data/posted.json
+          git add src/content/blog/ data/posted.json data/cron-state.json
           if git diff --staged --quiet; then
             echo "No changes — skipping commit."
             exit 0
           fi
           latest=$(ls -t src/content/blog/*.md | head -1 | xargs -n1 basename | sed 's/\.md$//')
-          git commit -m "post: ${latest}"
+          if git diff --staged --name-only | grep -q '^src/content/blog/'; then
+            git commit -m "post: ${latest}"
+          else
+            git commit -m "chore: update cron-state"
+          fi
           git push

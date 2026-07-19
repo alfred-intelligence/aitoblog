@@ -1,0 +1,37 @@
+name: escalate
+
+# Sista eskaleringslagret (06-ci-cd-plan §6): Telegram via Alfred för
+# priority:critical-issues. Opportunistisk kanal — no-op med tydlig
+# step-summary tills secret ALFRED_TG_TOKEN + variabel ALFRED_TG_CHAT_ID
+# finns. GitHub-issuet är alltid primärkanalen.
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  issues: read
+
+jobs:
+  telegram:
+    if: contains(github.event.issue.labels.*.name, 'priority:critical')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Notify Telegram (or note skip)
+        env:
+          TG_TOKEN: ${{ secrets.ALFRED_TG_TOKEN }}
+          TG_CHAT_ID: ${{ vars.ALFRED_TG_CHAT_ID }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: |
+          if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
+            echo "Telegram skipped — ALFRED_TG_TOKEN/ALFRED_TG_CHAT_ID saknas. Förväntat tills Alfred kopplas in." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          text=$(printf '🚨 aitoblog: %s\n%s' "$ISSUE_TITLE" "$ISSUE_URL")
+          curl -sf -X POST \
+            "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TG_CHAT_ID}" \
+            --data-urlencode "text=${text}"
+          echo "Telegram-notis skickad." >> "$GITHUB_STEP_SUMMARY"

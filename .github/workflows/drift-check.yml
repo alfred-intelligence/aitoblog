@@ -1,0 +1,98 @@
+name: drift-check
+
+# Loop 6 (06-ci-cd-plan §4.6): veckovis drift-detektor. Läser bara,
+# ändrar inget — fynd rapporteras som issue med label `drift`.
+# Tre kontroller: intern SSoT-drift, extern LTS-drift, beroendegapsdrift.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # måndag 06:00 UTC, två timmar före dependabot
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # 1. Intern drift: .nvmrc major vs package.json#engines.node major
+      - name: Check internal version drift
+        run: |
+          nvmrc_major=$(tr -d 'v\n' < .nvmrc | cut -d. -f1)
+          engines_major=$(jq -r '.engines.node' package.json | grep -oE '[0-9]+' | head -1)
+          if [ "$nvmrc_major" != "$engines_major" ]; then
+            echo "drift_internal=true" >> "$GITHUB_ENV"
+            echo "⚠️ Intern drift: .nvmrc major=$nvmrc_major, engines major=$engines_major" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "✅ Intern SSoT: .nvmrc och engines överens (major $nvmrc_major)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # 2. Extern drift: bygger repot på senaste Node LTS?
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build on latest LTS
+        id: lts_build
+        continue-on-error: true
+        run: pnpm build
+
+      - name: Detect external drift
+        if: steps.lts_build.outcome == 'failure'
+        run: |
+          echo "drift_external=true" >> "$GITHUB_ENV"
+          echo "⚠️ Extern drift: bygget failar på senaste Node LTS" >> "$GITHUB_STEP_SUMMARY"
+
+      # 3. Beroendegapsdrift: paket 2+ majors efter
+      - name: Check dependency major gap
+        run: |
+          outdated=$(pnpm outdated --format json 2>/dev/null || true)
+          # pnpm exitar non-zero när outdated finns; json kommer ändå på stdout
+          [ -z "$outdated" ] && outdated='{}'
+          gap=$(printf '%s' "$outdated" | jq -r '
+            [ to_entries[]
+              | (.value.current // "0") as $cur
+              | (.value.latest // "0") as $lat
+              | select((($lat | split(".")[0] | tonumber? // 0)
+                      - ($cur | split(".")[0] | tonumber? // 0)) >= 2)
+              | .key ] | join(", ")' 2>/dev/null || echo "")
+          if [ -n "$gap" ]; then
+            echo "drift_gap=true" >> "$GITHUB_ENV"
+            echo "gap_packages=$gap" >> "$GITHUB_ENV"
+            echo "⚠️ Beroendegapsdrift (2+ majors efter): $gap" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "✅ Inga paket 2+ majors efter" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # 4. Rapportera — ett drift-issue, dedupat mot redan öppet
+      - name: Open drift issue
+        if: env.drift_internal == 'true' || env.drift_external == 'true' || env.drift_gap == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh issue list --label drift --state open --json number --jq 'length')
+          if [ "$existing" != "0" ]; then
+            echo "Drift-issue redan öppet — hoppar över." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          details=""
+          [ "${drift_internal:-}" = "true" ] && details="$details- Intern SSoT-drift: .nvmrc och package.json#engines pekar på olika Node-major. Synka filerna.\n"
+          [ "${drift_external:-}" = "true" ] && details="$details- Extern drift: bygget failar på senaste Node LTS men passerar på pinnad version.\n"
+          [ "${drift_gap:-}" = "true" ] && details="$details- Beroendegapsdrift: ${gap_packages:-} ligger 2+ majors efter.\n"
+          body=$(printf 'Drift-detektorn hittade avvikelser:\n\n%b\nWorkflow-run: %s' \
+            "$details" \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+          gh issue create \
+            --title "drift: $(date -u +%F) version-/build-drift detekterad" \
+            --body "$body" \
+            --label "drift,automation-failure"

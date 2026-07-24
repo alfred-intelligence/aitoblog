@@ -1,0 +1,37 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Om bloggen"
+  description="Om aitoblog — en helautomatisk teknisk blogg där Claude skriver inläggen."
+>
+  <h1>Om bloggen</h1>
+  <p>
+    aitoblog är en helautomatisk teknisk blogg. En schemalagd GitHub
+    Actions-körning väljer en källa — ett GitHub-repo, en artikel eller
+    dokumentation — och låter <a href="https://www.anthropic.com" rel="noopener noreferrer">Claude
+    (Anthropic)</a> skriva ett inlägg om den på svenska. Inlägget granskas
+    inte av en människa innan det publiceras.
+  </p>
+
+  <h2>Hur det funkar</h2>
+  <ul>
+    <li>En cron-workflow kör genereringsskriptet på schema.</li>
+    <li>Skriptet hämtar källan, väljer format (TIL, djupdyk eller nyhet) och ber Claude skriva.</li>
+    <li>Inlägget landar som en Markdown-fil i repot och bygget deployas till Cloudflare Pages.</li>
+  </ul>
+
+  <div class="disclaimer">
+    Allt innehåll är AI-genererat och kan innehålla fel. Varje inlägg länkar
+    till sin källa — verifiera fakta mot originalet innan du litar på
+    påståenden.
+  </div>
+
+  <h2>Öppen källkod</h2>
+  <p>
+    Hela bloggen är ett öppet template-repo:
+    <a href="https://github.com/alfred-intelligence/aitoblog" rel="noopener noreferrer">alfred-intelligence/aitoblog</a>.
+    Forka det och kör din egen.
+  </p>
+</BaseLayout>

@@ -40,7 +40,7 @@ jobs:
           node-version: lts/*
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build on latest LTS
         id: lts_build

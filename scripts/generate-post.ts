@@ -5,6 +5,8 @@ import { fetchRepoContext } from './fetch-repo.js';
 import { fetchArticleContext } from './fetch-article.js';
 import { generatePost } from './claude.js';
 import { buildMarkdown, readPosted, writePost } from './post-writer.js';
+import { withRetry } from './retry.js';
+import { markSuccess, readState } from './cron-state.js';
 import type { Source } from './schema.js';
 
 loadEnv();
@@ -33,7 +35,7 @@ function parseArgs(argv: string[]): Args {
 
 async function resolveSource(args: Args): Promise<Source> {
   const sourcesUrl = args.sourcesUrl ?? process.env.SOURCES_URL;
-  const sources = await fetchSources(sourcesUrl);
+  const sources = await withRetry('fetchSources', () => fetchSources(sourcesUrl));
 
   if (args.forcedSource) {
     const target = args.forcedSource;
@@ -58,20 +60,28 @@ async function resolveSource(args: Args): Promise<Source> {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv);
 
+  const state = await readState();
+  if (state.paused) {
+    // Belt-and-braces — workflowens gate-steg ska ha stoppat innan hit.
+    throw new Error(
+      'Cron är pausad (data/cron-state.json paused=true). Återställ filen för att återuppta.',
+    );
+  }
+
   const source = await resolveSource(args);
   console.log(`[generate-post] Selected source (${source.type}): ${source.url}`);
 
   const context =
     source.type === 'repo'
-      ? await fetchRepoContext(source)
-      : await fetchArticleContext(source);
+      ? await withRetry('fetchRepoContext', () => fetchRepoContext(source))
+      : await withRetry('fetchArticleContext', () => fetchArticleContext(source));
   console.log(
     `[generate-post] Context fetched (${
       source.type === 'repo' ? 'GitHub API' : 'HTML + Readability'
     }).`,
   );
 
-  const aiPost = await generatePost(source, context);
+  const aiPost = await withRetry('generatePost', () => generatePost(source, context));
   console.log(`[generate-post] AI returned format=${aiPost.format} title="${aiPost.title}"`);
 
   if (args.dryRun) {
@@ -85,6 +95,11 @@ async function main(): Promise<void> {
 
   const written = await writePost(source, aiPost);
   console.log(`[generate-post] Wrote ${written.path}`);
+
+  // Failure räknas i workflowens failure-steg (cron-state.ts CLI), inte här —
+  // så att fel utanför scriptet också fångas och inget dubbelräknas.
+  await markSuccess();
+  console.log('[generate-post] cron-state: success markerad.');
 }
 
 main().catch((err) => {

@@ -1,0 +1,41 @@
+name: cron-watchdog
+
+# Loop 3-eskalering, nivå 2 (06-ci-cd-plan §4.3): när publish misslyckats
+# två gånger i rad öppnas ett cron-degraded-issue. Nivå 3 (paus + kritiskt
+# issue) hanteras av publish.yml själv. Deterministisk — inga AI-anrop.
+
+on:
+  workflow_run:
+    workflows: [publish]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      # Checka ut main EFTER att publish committat sin state — räknaren är färsk.
+      - uses: actions/checkout@v7
+
+      - name: Open degraded issue at 2 consecutive failures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          failures=$(jq -r '.consecutive_failures' data/cron-state.json)
+          echo "consecutive_failures=$failures" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$failures" = "2" ]; then
+            existing=$(gh issue list --label cron-degraded --state open --json number --jq 'length')
+            if [ "$existing" = "0" ]; then
+              body=$(printf 'Publish har misslyckats två gånger i rad. Ett tredje fel pausar cronen.\n\nSenaste run: %s' \
+                "${{ github.event.workflow_run.html_url }}")
+              gh issue create \
+                --title "⚠️ cron-publish: 2 fel i rad" \
+                --body "$body" \
+                --label "cron-degraded,automation-failure"
+            fi
+          fi

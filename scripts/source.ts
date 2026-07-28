@@ -4,6 +4,8 @@ import { SourcesSchema, type Source } from './schema.js';
 
 const REPO_SHORTHAND_RE = /^[\w.-]+\/[\w.-]+$/;
 const ALLOWED_SOURCES_HOSTS = new Set(['raw.githubusercontent.com', 'gist.githubusercontent.com']);
+const RAW_GITHUB_PATH_RE = /^\/[^/]+\/[^/]+\/[^/]+\/.+/;
+const GIST_GITHUB_PATH_RE = /^\/[^/]+\/[a-f0-9]+\/raw(?:\/|$)/i;
 
 function parseSourceString(raw: string): Source | null {
   const trimmed = raw.trim();
@@ -75,8 +77,21 @@ function validateRemoteSourcesUrl(value: string): string {
     throw new Error(`SOURCES_URL must not include credentials: ${value}`);
   }
 
-  if (!ALLOWED_SOURCES_HOSTS.has(parsed.hostname)) {
+  if (parsed.port) {
+    throw new Error(`SOURCES_URL must not include an explicit port: ${value}`);
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (!ALLOWED_SOURCES_HOSTS.has(hostname)) {
     throw new Error(`SOURCES_URL host is not allowed: ${parsed.hostname}`);
+  }
+
+  if (hostname === 'raw.githubusercontent.com' && !RAW_GITHUB_PATH_RE.test(parsed.pathname)) {
+    throw new Error(`SOURCES_URL path is not allowed for ${hostname}: ${parsed.pathname}`);
+  }
+
+  if (hostname === 'gist.githubusercontent.com' && !GIST_GITHUB_PATH_RE.test(parsed.pathname)) {
+    throw new Error(`SOURCES_URL path is not allowed for ${hostname}: ${parsed.pathname}`);
   }
 
   return parsed.toString();
